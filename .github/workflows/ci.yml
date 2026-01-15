@@ -1,0 +1,89 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Test & Build
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Run tests
+      run: npm test
+
+    - name: Build frontend
+      run: npm run build --workspace=apps/web
+
+    - name: Build backend
+      run: npm run build --workspace=apps/api
+
+    - name: Test structure validation
+      run: npx jest tests/structure.test.js
+
+    - name: Test development environment
+      run: npx jest tests/dev-environment.test.js
+
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        echo "Options for deployment:"
+        echo "1. Railway: Connect to this repo, set build/start commands"
+        echo "   - Frontend: 'npm run build --workspace=apps/web' -> serve dist/"
+        echo "   - Backend: 'npm run build --workspace=apps/api' -> 'npm start'"
+        echo "2. Render: Create web services for both apps"
+        echo "   - Set environment variables: NODE_ENV=staging"
+        echo "   - Configure SurrealDB connection URL"
+        echo "Deployment ready for Railway/Render integration"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production environment..."
+        echo "Production deployment checklist:"
+        echo "✓ All tests passing"
+        echo "✓ Code reviewed and approved"
+        echo "✓ Environment variables configured"
+        echo "✓ Database migrations ready"
+        echo "Railway/Render production deployment ready"

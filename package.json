@@ -1,0 +1,24 @@
+{
+  "name": "homeschool-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Homeschool learning platform with SurrealDB",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "lint": "turbo lint",
+    "test": "turbo test && npm run test:structure && npm run test:dev-env",
+    "test:structure": "jest tests/structure.test.js",
+    "test:dev-env": "jest tests/dev-environment.test.js",
+    "test:e2e": "turbo test:e2e",
+    "clean": "turbo clean"
+  },
+  "devDependencies": {
+    "turbo": "^1.11.2"
+  },
+  "packageManager": "npm@9.6.7"
+}
