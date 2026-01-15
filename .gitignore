@@ -49,6 +49,9 @@ tmp/
 temp/
 *.tmp
 
-# SurrealDB
+# Database (legacy)
 *.db
 surreal-data/
+
+# Convex
+.convex/

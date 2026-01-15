@@ -1,24 +1,37 @@
 {
-  "name": "homeschool-monorepo",
+  "name": "homeschool",
   "private": true,
   "version": "1.0.0",
-  "description": "Homeschool learning platform with SurrealDB",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "description": "AI-powered homeschool learning platform",
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev --parallel",
-    "lint": "turbo lint",
-    "test": "turbo test && npm run test:structure && npm run test:dev-env",
-    "test:structure": "jest tests/structure.test.js",
-    "test:dev-env": "jest tests/dev-environment.test.js",
-    "test:e2e": "turbo test:e2e",
-    "clean": "turbo clean"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@convex-dev/auth": "^0.0.74",
+    "convex": "^1.17.4",
+    "next": "15.1.0",
+    "openai": "^4.77.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "turbo": "^1.11.2"
-  },
-  "packageManager": "npm@9.6.7"
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "15.1.0",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
 }
