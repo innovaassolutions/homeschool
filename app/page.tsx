@@ -4,9 +4,18 @@ export const dynamic = "force-dynamic";
 
 import { useConvexAuth } from "convex/react";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 export default function Home() {
-  const { isAuthenticated, isLoading } = useConvexAuth();
+  const [mounted, setMounted] = useState(false);
+  const auth = useConvexAuth();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isLoading = !mounted || auth?.isLoading;
+  const isAuthenticated = auth?.isAuthenticated;
 
   if (isLoading) {
     return (

@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function RegisterPage() {
-  const { signIn } = useAuthActions();
+  const [mounted, setMounted] = useState(false);
+  const authActions = useAuthActions();
   const createFamily = useMutation(api.families.create);
   const router = useRouter();
 
@@ -22,6 +23,20 @@ export default function RegisterPage() {
   const [coppaConsent, setCoppaConsent] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const signIn = authActions?.signIn;
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
 
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
