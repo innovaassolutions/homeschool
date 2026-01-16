@@ -316,7 +316,7 @@ export default function TodayPage() {
 
               <p className="text-sm text-gray-500">
                 Next up: {allBlocks[currentBlockIndex + 1]?.subject
-                  ? SUBJECT_INFO[allBlocks[currentBlockIndex + 1].subject]?.name || allBlocks[currentBlockIndex + 1].subject
+                  ? SUBJECT_INFO[allBlocks[currentBlockIndex + 1]?.subject as string]?.name || allBlocks[currentBlockIndex + 1]?.subject
                   : "Nothing"}
               </p>
             </div>

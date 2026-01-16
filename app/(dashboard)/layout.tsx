@@ -2,7 +2,7 @@
 
 import { useConvexAuth } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
 
@@ -11,9 +11,19 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useConvexAuth();
-  const { signOut } = useAuthActions();
+  const [mounted, setMounted] = useState(false);
+  const auth = useConvexAuth();
+  const authActions = useAuthActions();
   const router = useRouter();
+
+  // Handle hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isLoading = !mounted || auth?.isLoading;
+  const isAuthenticated = auth?.isAuthenticated;
+  const signOut = authActions?.signOut;
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
