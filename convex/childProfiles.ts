@@ -2,6 +2,12 @@ import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 
+// Available avatar emojis for children
+export const AVATAR_EMOJIS = [
+  "🦁", "🐼", "🦊", "🐸", "🦋", "🐢", "🦄", "🐙",
+  "🦖", "🐳", "🦩", "🐨", "🦝", "🦔", "🐝", "🦜",
+];
+
 export const list = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
@@ -48,6 +54,8 @@ export const get = query({
 export const create = mutation({
   args: {
     name: v.string(),
+    pin: v.string(), // 4-digit PIN
+    avatarEmoji: v.optional(v.string()),
     ageGroup: v.union(
       v.literal("ages6to9"),
       v.literal("ages10to13"),
@@ -57,6 +65,11 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
+
+    // Validate PIN is 4 digits
+    if (!/^\d{4}$/.test(args.pin)) {
+      throw new Error("PIN must be exactly 4 digits");
+    }
 
     const family = await ctx.db
       .query("families")
@@ -68,6 +81,8 @@ export const create = mutation({
     return ctx.db.insert("childProfiles", {
       familyId: family._id,
       name: args.name,
+      pin: args.pin,
+      avatarEmoji: args.avatarEmoji || AVATAR_EMOJIS[Math.floor(Math.random() * AVATAR_EMOJIS.length)],
       ageGroup: args.ageGroup,
       parentalControls: {
         voiceRecordingsAllowed: true,
@@ -77,6 +92,74 @@ export const create = mutation({
         realTimeMonitoring: true,
       },
     });
+  },
+});
+
+// Verify PIN for child login (no auth required)
+export const verifyPin = query({
+  args: {
+    childId: v.id("childProfiles"),
+    pin: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const child = await ctx.db.get(args.childId);
+    if (!child) return { success: false, error: "Child not found" };
+
+    if (child.pin !== args.pin) {
+      return { success: false, error: "Incorrect PIN" };
+    }
+
+    // Update last active
+    // Note: Can't mutate in a query, will do this in a separate mutation
+
+    return {
+      success: true,
+      child: {
+        _id: child._id,
+        name: child.name,
+        ageGroup: child.ageGroup,
+        avatarEmoji: child.avatarEmoji,
+        familyId: child.familyId,
+      },
+    };
+  },
+});
+
+// Mark child as active after successful login
+export const markActive = mutation({
+  args: { childId: v.id("childProfiles") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.childId, {
+      lastActive: Date.now(),
+    });
+  },
+});
+
+// Update PIN (parent only)
+export const updatePin = mutation({
+  args: {
+    childId: v.id("childProfiles"),
+    newPin: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    // Validate PIN
+    if (!/^\d{4}$/.test(args.newPin)) {
+      throw new Error("PIN must be exactly 4 digits");
+    }
+
+    const child = await ctx.db.get(args.childId);
+    if (!child) throw new Error("Child not found");
+
+    // Verify ownership
+    const family = await ctx.db.get(child.familyId);
+    if (!family || family.userId !== userId) {
+      throw new Error("Not authorized");
+    }
+
+    await ctx.db.patch(args.childId, { pin: args.newPin });
   },
 });
 
