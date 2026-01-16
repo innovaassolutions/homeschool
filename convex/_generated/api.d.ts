@@ -14,6 +14,7 @@ import type * as childProfiles from "../childProfiles.js";
 import type * as conversations from "../conversations.js";
 import type * as dailyProgress from "../dailyProgress.js";
 import type * as families from "../families.js";
+import type * as http from "../http.js";
 import type * as ixlData from "../ixlData.js";
 import type * as notifications from "../notifications.js";
 import type * as sessions from "../sessions.js";
@@ -32,6 +33,7 @@ declare const fullApi: ApiFromModules<{
   conversations: typeof conversations;
   dailyProgress: typeof dailyProgress;
   families: typeof families;
+  http: typeof http;
   ixlData: typeof ixlData;
   notifications: typeof notifications;
   sessions: typeof sessions;
