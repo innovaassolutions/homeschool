@@ -1,7 +1,7 @@
 "use client";
 
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexReactClient } from "convex/react";
 import { ReactNode } from "react";
 
 // Singleton client - only exists on client side
@@ -21,13 +21,10 @@ function getClient(): ConvexReactClient {
 export function ConvexProviderWrapper({ children }: { children: ReactNode }) {
   const client = getClient();
 
-  // Use ConvexProvider for core Convex functionality (useConvexAuth, useQuery, etc.)
-  // Use ConvexAuthProvider for auth actions (signIn, signOut)
+  // ConvexAuthProvider provides both auth functionality AND the Convex context
   return (
-    <ConvexProvider client={client}>
-      <ConvexAuthProvider client={client}>
-        {children}
-      </ConvexAuthProvider>
-    </ConvexProvider>
+    <ConvexAuthProvider client={client}>
+      {children}
+    </ConvexAuthProvider>
   );
 }
