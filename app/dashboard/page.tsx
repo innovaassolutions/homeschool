@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const family = useQuery(api.families.get);
   const children = useQuery(api.childProfiles.list);
   const createChild = useMutation(api.childProfiles.create);
+  const createFamily = useMutation(api.families.create);
   const notifications = useParentNotifications();
 
   const [showAddChild, setShowAddChild] = useState(false);
@@ -18,6 +19,11 @@ export default function DashboardPage() {
   const [newChildPin, setNewChildPin] = useState("");
   const [newChildAge, setNewChildAge] = useState<"ages6to9" | "ages10to13" | "ages14to16">("ages6to9");
   const [selectedChild, setSelectedChild] = useState<Id<"childProfiles"> | null>(null);
+
+  // Family creation state
+  const [familyName, setFamilyName] = useState("");
+  const [coppaConsent, setCoppaConsent] = useState(false);
+  const [isCreatingFamily, setIsCreatingFamily] = useState(false);
 
   const handleAddChild = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,14 +37,84 @@ export default function DashboardPage() {
     setShowAddChild(false);
   };
 
-  if (!family) {
+  const handleCreateFamily = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!familyName.trim()) {
+      alert("Please enter your family name");
+      return;
+    }
+    if (!coppaConsent) {
+      alert("Please confirm COPPA consent to continue");
+      return;
+    }
+    setIsCreatingFamily(true);
+    try {
+      await createFamily({ name: familyName.trim(), coppaConsent });
+    } catch (error) {
+      console.error("Failed to create family:", error);
+      alert("Failed to create family. Please try again.");
+    } finally {
+      setIsCreatingFamily(false);
+    }
+  };
+
+  // Show family creation form if authenticated but no family exists
+  if (family === null) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900">Complete Your Profile</h2>
-        <p className="mt-2 text-gray-600">Please complete your family registration first.</p>
-        <Link href="/register" className="mt-4 btn-primary inline-block">
-          Complete Registration
-        </Link>
+      <div className="max-w-md mx-auto py-12">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-4">👨‍👩‍👧‍👦</div>
+            <h2 className="text-2xl font-bold text-gray-900">Complete Your Profile</h2>
+            <p className="mt-2 text-gray-600">Set up your family to get started with homeschool learning.</p>
+          </div>
+          <form onSubmit={handleCreateFamily} className="space-y-6">
+            <div>
+              <label htmlFor="familyName" className="block text-sm font-medium text-gray-700">
+                Family Name
+              </label>
+              <input
+                type="text"
+                id="familyName"
+                value={familyName}
+                onChange={(e) => setFamilyName(e.target.value)}
+                placeholder="e.g., The Smith Family"
+                required
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500
+                           sm:text-sm"
+              />
+              <p className="mt-1 text-xs text-gray-500">This will be used to create your unique family code</p>
+            </div>
+            <div className="flex items-start">
+              <input
+                type="checkbox"
+                id="coppaConsent"
+                checked={coppaConsent}
+                onChange={(e) => setCoppaConsent(e.target.checked)}
+                required
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <label htmlFor="coppaConsent" className="ml-3 text-sm text-gray-600">
+                I confirm that I am the parent or legal guardian of any children who will use this platform, and I consent to their use in accordance with COPPA regulations.
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={isCreatingFamily || !familyName.trim() || !coppaConsent}
+              className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed">
+              {isCreatingFamily ? "Creating..." : "Create Family Profile"}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while family query is in progress
+  if (family === undefined) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
       </div>
     );
   }
