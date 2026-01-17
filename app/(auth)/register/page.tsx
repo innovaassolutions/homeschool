@@ -56,7 +56,9 @@ export default function RegisterPage() {
       await signIn("password", { email, password, flow: "signUp" });
       setStep("family");
     } catch (err) {
-      setError("Could not create account. Email may already be in use.");
+      console.error("Registration error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Could not create account: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
