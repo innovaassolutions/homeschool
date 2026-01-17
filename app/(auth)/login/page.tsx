@@ -33,11 +33,21 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
+    if (!signIn) {
+      setError("Authentication not ready. Please refresh the page.");
+      setLoading(false);
+      return;
+    }
+
     try {
+      console.log("Attempting sign in...");
       await signIn("password", { email, password, flow: "signIn" });
+      console.log("Sign in successful, redirecting...");
       router.push("/dashboard");
     } catch (err) {
-      setError("Invalid email or password. Please try again.");
+      console.error("Login error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(`Login failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
