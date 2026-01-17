@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
+import { useState, useCallback } from "react";
 
 // Format timestamp to readable date
 function formatDate(timestamp: number): string {
@@ -30,6 +31,74 @@ function getLevelColor(level: number): string {
 
 export default function IXLPage() {
   const ixlStatus = useQuery(api.ixlData.getAllChildrenIxlStatus);
+  const children = useQuery(api.childProfiles.list);
+  const importRecommendations = useMutation(api.ixlData.importFromMarkdown);
+
+  const [showUpload, setShowUpload] = useState(false);
+  const [markdownContent, setMarkdownContent] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFileUpload = useCallback((file: File) => {
+    if (!file.name.endsWith(".md") && !file.name.endsWith(".txt")) {
+      setUploadResult({ success: false, message: "Please upload a .md or .txt file" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setMarkdownContent(content);
+      setUploadResult(null);
+    };
+    reader.readAsText(file);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  }, [handleFileUpload]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleProcessMarkdown = async () => {
+    if (!markdownContent.trim()) {
+      setUploadResult({ success: false, message: "No content to process" });
+      return;
+    }
+
+    setIsProcessing(true);
+    setUploadResult(null);
+
+    try {
+      const result = await importRecommendations({ markdownContent });
+      setUploadResult({
+        success: true,
+        message: `Successfully imported recommendations for ${result.childrenUpdated} children`,
+      });
+      setMarkdownContent("");
+      setShowUpload(false);
+    } catch (error) {
+      console.error("Failed to process markdown:", error);
+      setUploadResult({
+        success: false,
+        message: error instanceof Error ? error.message : "Failed to process recommendations",
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -45,15 +114,110 @@ export default function IXLPage() {
           <h1 className="text-2xl font-bold text-gray-900">IXL Progress</h1>
           <p className="text-gray-600">Diagnostic levels and recommendations from IXL</p>
         </div>
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <p className="text-sm text-blue-800">
-            <span className="font-medium">Sync with Claude Code:</span>
-          </p>
-          <code className="text-xs text-blue-600 block mt-1">
-            &quot;Sync IXL recommendations&quot;
-          </code>
-        </div>
+        <button
+          onClick={() => setShowUpload(!showUpload)}
+          className="btn-primary flex items-center gap-2">
+          <span>📤</span>
+          Upload Recommendations
+        </button>
       </div>
+
+      {/* Upload Section */}
+      {showUpload && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Import IXL Recommendations</h2>
+
+          <div className="space-y-4">
+            {/* Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800 font-medium mb-2">How to get your recommendations file:</p>
+              <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                <li>Open Claude Code with Chrome: <code className="bg-blue-100 px-1 rounded">claude</code></li>
+                <li>Navigate to each child&apos;s IXL recommendations page</li>
+                <li>Ask Claude to capture and export recommendations as markdown</li>
+                <li>Upload the generated .md file here</li>
+              </ol>
+            </div>
+
+            {/* Drop Zone */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                isDragging
+                  ? "border-primary-500 bg-primary-50"
+                  : "border-gray-300 hover:border-gray-400"
+              }`}>
+              <div className="text-4xl mb-3">📄</div>
+              <p className="text-gray-600 mb-2">
+                Drag and drop your markdown file here, or
+              </p>
+              <label className="btn-secondary cursor-pointer inline-block">
+                Browse Files
+                <input
+                  type="file"
+                  accept=".md,.txt"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                  className="hidden"
+                />
+              </label>
+            </div>
+
+            {/* Preview */}
+            {markdownContent && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-gray-900">Preview</h3>
+                  <span className="text-sm text-gray-500">
+                    {markdownContent.length} characters
+                  </span>
+                </div>
+                <div className="bg-gray-50 border rounded-lg p-4 max-h-64 overflow-y-auto">
+                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
+                    {markdownContent.slice(0, 2000)}
+                    {markdownContent.length > 2000 && "\n\n... (truncated)"}
+                  </pre>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setMarkdownContent("");
+                      setUploadResult(null);
+                    }}
+                    className="btn-secondary">
+                    Clear
+                  </button>
+                  <button
+                    onClick={handleProcessMarkdown}
+                    disabled={isProcessing}
+                    className="btn-primary flex-1 disabled:opacity-50">
+                    {isProcessing ? "Processing..." : "Import Recommendations"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Result Message */}
+            {uploadResult && (
+              <div className={`rounded-lg p-4 ${
+                uploadResult.success
+                  ? "bg-green-50 border border-green-200"
+                  : "bg-red-50 border border-red-200"
+              }`}>
+                <p className={`text-sm ${
+                  uploadResult.success ? "text-green-800" : "text-red-800"
+                }`}>
+                  {uploadResult.success ? "✓ " : "✗ "}{uploadResult.message}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Children IXL Cards */}
       <div className="space-y-6">
@@ -116,16 +280,13 @@ export default function IXLPage() {
           <div className="text-4xl mb-4">📊</div>
           <h2 className="text-xl font-semibold text-gray-900">No IXL Data Yet</h2>
           <p className="mt-2 text-gray-600 max-w-md mx-auto">
-            Use Claude Code with Chrome integration to sync IXL diagnostic data and recommendations for your children.
+            Upload a markdown file with IXL recommendations to get started.
           </p>
-          <div className="mt-6 bg-gray-50 rounded-lg p-4 max-w-sm mx-auto text-left">
-            <p className="text-sm font-medium text-gray-700 mb-2">How to sync:</p>
-            <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Log into IXL in Chrome</li>
-              <li>Run <code className="bg-gray-200 px-1 rounded">claude --chrome</code></li>
-              <li>Ask: &quot;Sync IXL recommendations&quot;</li>
-            </ol>
-          </div>
+          <button
+            onClick={() => setShowUpload(true)}
+            className="mt-6 btn-primary">
+            Upload Recommendations
+          </button>
         </div>
       )}
 
@@ -135,10 +296,9 @@ export default function IXLPage() {
           <div className="flex items-start gap-3">
             <span className="text-xl">💡</span>
             <div>
-              <p className="font-medium text-yellow-800">No diagnostic data synced yet</p>
+              <p className="font-medium text-yellow-800">No diagnostic data imported yet</p>
               <p className="text-sm text-yellow-700 mt-1">
-                Use Claude Code to extract IXL diagnostic levels and recommendations.
-                Make sure you&apos;re logged into IXL with parent account access to all children.
+                Click &quot;Upload Recommendations&quot; above to import IXL data from a markdown file.
               </p>
             </div>
           </div>
@@ -216,7 +376,7 @@ function SubjectCard({
       ) : (
         <div className="text-center py-4">
           <p className="text-sm text-gray-500">No data yet</p>
-          <p className="text-xs text-gray-400 mt-1">Sync from IXL to see progress</p>
+          <p className="text-xs text-gray-400 mt-1">Upload recommendations to see progress</p>
         </div>
       )}
     </div>
