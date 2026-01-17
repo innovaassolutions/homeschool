@@ -1,6 +1,6 @@
 "use client";
 
-import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
+import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import { ReactNode } from "react";
 
@@ -21,13 +21,13 @@ function getClient(): ConvexReactClient {
 export function ConvexProviderWrapper({ children }: { children: ReactNode }) {
   const client = getClient();
 
-  // ConvexProvider is required for useConvexAuth and other convex/react hooks
-  // ConvexAuthNextjsProvider adds auth functionality on top
+  // Use ConvexProvider for core Convex functionality (useConvexAuth, useQuery, etc.)
+  // Use ConvexAuthProvider for auth actions (signIn, signOut)
   return (
     <ConvexProvider client={client}>
-      <ConvexAuthNextjsProvider client={client}>
+      <ConvexAuthProvider client={client}>
         {children}
-      </ConvexAuthNextjsProvider>
+      </ConvexAuthProvider>
     </ConvexProvider>
   );
 }
