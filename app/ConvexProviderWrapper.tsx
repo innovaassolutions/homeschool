@@ -1,7 +1,7 @@
 "use client";
 
 import { ConvexAuthNextjsProvider } from "@convex-dev/auth/nextjs";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexReactClient } from "convex/react";
 import { ReactNode } from "react";
 
 // Singleton client - only exists on client side
@@ -19,14 +19,9 @@ function getClient(): ConvexReactClient {
 }
 
 export function ConvexProviderWrapper({ children }: { children: ReactNode }) {
-  const client = getClient();
-
-  // Wrap with both ConvexProvider (for useConvexAuth) and ConvexAuthNextjsProvider (for auth)
   return (
-    <ConvexProvider client={client}>
-      <ConvexAuthNextjsProvider client={client}>
-        {children}
-      </ConvexAuthNextjsProvider>
-    </ConvexProvider>
+    <ConvexAuthNextjsProvider client={getClient()}>
+      {children}
+    </ConvexAuthNextjsProvider>
   );
 }

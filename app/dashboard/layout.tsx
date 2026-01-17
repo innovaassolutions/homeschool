@@ -1,8 +1,8 @@
 "use client";
 
-import { useConvexAuth } from "convex/react";
+import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useAuthActions } from "@convex-dev/auth/react";
 
@@ -11,37 +11,38 @@ export default function DashboardPageLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
-  const auth = useConvexAuth();
-  const authActions = useAuthActions();
+  return (
+    <>
+      <AuthLoading>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+        </div>
+      </AuthLoading>
+
+      <Unauthenticated>
+        <RedirectToLogin />
+      </Unauthenticated>
+
+      <Authenticated>
+        <DashboardContent>{children}</DashboardContent>
+      </Authenticated>
+    </>
+  );
+}
+
+function RedirectToLogin() {
   const router = useRouter();
 
-  // Handle hydration
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    router.push("/login");
+  }, [router]);
 
-  const isLoading = !mounted || auth?.isLoading;
-  const isAuthenticated = auth?.isAuthenticated;
-  const signOut = authActions?.signOut;
+  return null;
+}
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/login");
-    }
-  }, [isAuthenticated, isLoading, router]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
+function DashboardContent({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const { signOut } = useAuthActions();
 
   const handleSignOut = async () => {
     await signOut();
