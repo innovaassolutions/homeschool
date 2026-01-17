@@ -1,53 +1,35 @@
 "use client";
 
-import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { useUser, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import Link from "next/link";
-import { useAuthActions } from "@convex-dev/auth/react";
 
 export default function DashboardPageLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <>
-      <AuthLoading>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-        </div>
-      </AuthLoading>
-
-      <Unauthenticated>
-        <RedirectToLogin />
-      </Unauthenticated>
-
-      <Authenticated>
-        <DashboardContent>{children}</DashboardContent>
-      </Authenticated>
-    </>
-  );
-}
-
-function RedirectToLogin() {
+  const { isLoaded, isSignedIn } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    router.push("/login");
-  }, [router]);
+    if (isLoaded && !isSignedIn) {
+      router.push("/login");
+    }
+  }, [isLoaded, isSignedIn, router]);
 
-  return null;
-}
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
 
-function DashboardContent({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const { signOut } = useAuthActions();
-
-  const handleSignOut = async () => {
-    await signOut();
-    router.push("/");
-  };
+  if (!isSignedIn) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -89,12 +71,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="flex items-center">
-              <button
-                onClick={handleSignOut}
-                className="text-sm font-medium text-gray-500
-                           hover:text-gray-700">
-                Sign out
-              </button>
+              <UserButton afterSignOutUrl="/" />
             </div>
           </div>
         </div>

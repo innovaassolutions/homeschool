@@ -1,24 +1,18 @@
 "use client";
 
-import { Authenticated, Unauthenticated, AuthLoading } from "convex/react";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
 import Link from "next/link";
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-primary-50 to-white">
-      <AuthLoading>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-        </div>
-      </AuthLoading>
-
-      <Authenticated>
+      <SignedIn>
         <PageContent isAuthenticated={true} />
-      </Authenticated>
+      </SignedIn>
 
-      <Unauthenticated>
+      <SignedOut>
         <PageContent isAuthenticated={false} />
-      </Unauthenticated>
+      </SignedOut>
     </main>
   );
 }

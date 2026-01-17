@@ -1,7 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
-import type { Id } from "./_generated/dataModel";
 
 // Block type definition for validation
 const blockValidator = v.object({
@@ -28,15 +26,15 @@ const blockValidator = v.object({
 export const getByChild = query({
   args: { childId: v.id("childProfiles") },
   handler: async (ctx, { childId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     // Verify ownership
     const child = await ctx.db.get(childId);
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     return ctx.db
       .query("weeklyPlans")
@@ -52,15 +50,15 @@ export const getByChildAndDay = query({
     dayOfWeek: v.number(),
   },
   handler: async (ctx, { childId, dayOfWeek }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     // Verify ownership
     const child = await ctx.db.get(childId);
     if (!child) return null;
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return null;
+    if (!family || family.clerkUserId !== identity.subject) return null;
 
     return ctx.db
       .query("weeklyPlans")
@@ -95,15 +93,15 @@ export const upsert = mutation({
     isActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Check if plan already exists for this day
     const existing = await ctx.db
@@ -146,15 +144,15 @@ export const addBlock = mutation({
     block: blockValidator,
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Get existing plan
     let plan = await ctx.db
@@ -196,8 +194,8 @@ export const removeBlock = mutation({
     blockId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const plan = await ctx.db.get(args.planId);
     if (!plan) throw new Error("Plan not found");
@@ -207,7 +205,7 @@ export const removeBlock = mutation({
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     const newBlocks = plan.blocks.filter((b) => b.id !== args.blockId);
     await ctx.db.patch(args.planId, {
@@ -224,8 +222,8 @@ export const reorderBlocks = mutation({
     blockIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const plan = await ctx.db.get(args.planId);
     if (!plan) throw new Error("Plan not found");
@@ -235,7 +233,7 @@ export const reorderBlocks = mutation({
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Reorder blocks based on blockIds array
     const blockMap = new Map(plan.blocks.map((b) => [b.id, b]));
@@ -261,15 +259,15 @@ export const copyDay = mutation({
     toDayOfWeek: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Get source plan
     const sourcePlan = await ctx.db

@@ -1,21 +1,7 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import { ReactNode } from "react";
-
-// Dynamically import the Convex provider with SSR disabled
-// This ensures all Convex-related code only runs on the client
-const ConvexProviderWrapper = dynamic(
-  () => import("./ConvexProviderWrapper").then(mod => mod.ConvexProviderWrapper),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
-      </div>
-    ),
-  }
-);
+import { ConvexProviderWrapper } from "./ConvexProviderWrapper";
 
 export function Providers({ children }: { children: ReactNode }) {
   return <ConvexProviderWrapper>{children}</ConvexProviderWrapper>;

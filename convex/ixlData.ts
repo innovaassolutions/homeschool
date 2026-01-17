@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Save IXL diagnostic data (called by Claude Code after extracting from IXL)
 export const saveDiagnostic = mutation({
@@ -15,15 +14,15 @@ export const saveDiagnostic = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     return ctx.db.insert("ixlDiagnostics", {
       childId: args.childId,
@@ -50,15 +49,15 @@ export const saveRecommendations = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Check if existing recommendations for this child/subject
     const existing = await ctx.db
@@ -93,15 +92,15 @@ export const saveRecommendations = mutation({
 export const getDiagnostics = query({
   args: { childId: v.id("childProfiles") },
   handler: async (ctx, { childId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     // Verify ownership
     const child = await ctx.db.get(childId);
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     // Get latest diagnostic for each subject
     const mathDiag = await ctx.db
@@ -132,15 +131,15 @@ export const getDiagnosticHistory = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     return ctx.db
       .query("ixlDiagnostics")
@@ -156,15 +155,15 @@ export const getDiagnosticHistory = query({
 export const getRecommendations = query({
   args: { childId: v.id("childProfiles") },
   handler: async (ctx, { childId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     // Verify ownership
     const child = await ctx.db.get(childId);
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     return ctx.db
       .query("ixlRecommendations")
@@ -180,8 +179,8 @@ export const markRecommendationsSynced = mutation({
     subject: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const rec = await ctx.db
       .query("ixlRecommendations")
@@ -204,15 +203,15 @@ export const applyRecommendationsToSchedule = mutation({
     dayOfWeek: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) throw new Error("Not authorized");
+    if (!family || family.clerkUserId !== identity.subject) throw new Error("Not authorized");
 
     // Get recommendations
     const rec = await ctx.db
@@ -274,12 +273,12 @@ export const applyRecommendationsToSchedule = mutation({
 // Get all children's IXL status (for parent dashboard)
 export const getAllChildrenIxlStatus = query({
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) return [];

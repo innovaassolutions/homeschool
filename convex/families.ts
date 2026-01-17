@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Generate a unique family code (e.g., "SMITH-7823")
 function generateFamilyCode(familyName: string): string {
@@ -15,12 +14,12 @@ function generateFamilyCode(familyName: string): string {
 
 export const get = query({
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     return ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
   },
 });
@@ -76,13 +75,15 @@ export const create = mutation({
     coppaConsent: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const clerkUserId = identity.subject;
 
     // Check if family already exists
     const existing = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", clerkUserId))
       .first();
 
     if (existing) {
@@ -103,7 +104,7 @@ export const create = mutation({
     }
 
     return ctx.db.insert("families", {
-      userId,
+      clerkUserId,
       name: args.name,
       familyCode,
       subscriptionTier: "free",
@@ -123,12 +124,12 @@ export const update = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) throw new Error("Family not found");

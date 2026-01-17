@@ -1,13 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
-  ...authTables,
-
-  // Families (extends users from Convex Auth)
+  // Families - linked to Clerk user ID
   families: defineTable({
-    userId: v.id("users"),
+    clerkUserId: v.string(), // Clerk user ID
     name: v.string(),
     familyCode: v.string(), // Unique code for child login (e.g., "SMITH-7823")
     subscriptionTier: v.optional(v.string()),
@@ -19,7 +16,7 @@ export default defineSchema({
       allowAnonymousAnalytics: v.boolean(),
     })),
   })
-    .index("by_user", ["userId"])
+    .index("by_clerk_user", ["clerkUserId"])
     .index("by_family_code", ["familyCode"]),
 
   // Child profiles
@@ -215,7 +212,7 @@ export default defineSchema({
   // Push notification subscriptions
   pushSubscriptions: defineTable({
     recipientType: v.union(v.literal("parent"), v.literal("child")),
-    userId: v.optional(v.id("users")), // For parent
+    clerkUserId: v.optional(v.string()), // Clerk user ID for parent
     childId: v.optional(v.id("childProfiles")), // For child
     familyId: v.id("families"),
     deviceName: v.optional(v.string()),
@@ -229,7 +226,7 @@ export default defineSchema({
     isActive: v.boolean(),
     createdAt: v.number(),
   })
-    .index("by_user", ["userId"])
+    .index("by_clerk_user", ["clerkUserId"])
     .index("by_child", ["childId"])
     .index("by_family", ["familyId"]),
 

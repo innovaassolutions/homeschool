@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Available avatar emojis for children
 export const AVATAR_EMOJIS = [
@@ -10,12 +9,12 @@ export const AVATAR_EMOJIS = [
 
 export const list = query({
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) return [];
@@ -37,15 +36,15 @@ export const getById = internalQuery({
 export const get = query({
   args: { id: v.id("childProfiles") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const child = await ctx.db.get(args.id);
     if (!child) return null;
 
     // Verify ownership
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return null;
+    if (!family || family.clerkUserId !== identity.subject) return null;
 
     return child;
   },
@@ -63,8 +62,8 @@ export const create = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Validate PIN is 4 digits
     if (!/^\d{4}$/.test(args.pin)) {
@@ -73,7 +72,7 @@ export const create = mutation({
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) throw new Error("Family not found. Please complete registration first.");
@@ -142,8 +141,8 @@ export const updatePin = mutation({
     newPin: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Validate PIN
     if (!/^\d{4}$/.test(args.newPin)) {
@@ -155,7 +154,7 @@ export const updatePin = mutation({
 
     // Verify ownership
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) {
+    if (!family || family.clerkUserId !== identity.subject) {
       throw new Error("Not authorized");
     }
 
@@ -186,15 +185,15 @@ export const update = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const child = await ctx.db.get(args.id);
     if (!child) throw new Error("Child profile not found");
 
     // Verify ownership
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) {
+    if (!family || family.clerkUserId !== identity.subject) {
       throw new Error("Not authorized");
     }
 
@@ -215,15 +214,15 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id("childProfiles") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const child = await ctx.db.get(args.id);
     if (!child) throw new Error("Child profile not found");
 
     // Verify ownership
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) {
+    if (!family || family.clerkUserId !== identity.subject) {
       throw new Error("Not authorized");
     }
 

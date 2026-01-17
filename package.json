@@ -12,8 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@auth/core": "^0.36.0",
-    "@convex-dev/auth": "^0.0.74",
+    "@clerk/nextjs": "^6.36.8",
     "convex": "^1.31.5",
     "next": "15.5.9",
     "openai": "^4.77.0",

@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Helper to get today's date string
 function getTodayString(): string {
@@ -35,15 +34,15 @@ export const getByChildAndDate = query({
     date: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     // Verify ownership
     const child = await ctx.db.get(args.childId);
     if (!child) return null;
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return null;
+    if (!family || family.clerkUserId !== identity.subject) return null;
 
     return ctx.db
       .query("dailyProgress")
@@ -57,12 +56,12 @@ export const getByChildAndDate = query({
 // Get all children's progress for today (parent status dashboard)
 export const getAllChildrenTodayProgress = query({
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) return [];

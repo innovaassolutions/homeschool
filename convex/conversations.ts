@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 export const getHistory = internalQuery({
   args: { sessionId: v.id("learningSessions") },
@@ -19,8 +18,8 @@ export const getBySession = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     // Verify session ownership
     const session = await ctx.db.get(args.sessionId);
@@ -30,7 +29,7 @@ export const getBySession = query({
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     const query = ctx.db
       .query("conversationMessages")
@@ -77,8 +76,8 @@ export const send = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     // Verify session ownership
     const session = await ctx.db.get(args.sessionId);
@@ -88,7 +87,7 @@ export const send = mutation({
     if (!child) throw new Error("Child not found");
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) {
+    if (!family || family.clerkUserId !== identity.subject) {
       throw new Error("Not authorized");
     }
 

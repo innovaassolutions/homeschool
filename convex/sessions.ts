@@ -1,34 +1,33 @@
 import { v } from "convex/values";
 import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Helper to verify child ownership
 async function verifyChildOwnership(ctx: any, childId: any) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) throw new Error("Not authenticated");
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
 
   const child = await ctx.db.get(childId);
   if (!child) throw new Error("Child not found");
 
   const family = await ctx.db.get(child.familyId);
-  if (!family || family.userId !== userId) {
+  if (!family || family.clerkUserId !== identity.subject) {
     throw new Error("Not authorized");
   }
 
-  return { userId, child, family };
+  return { identity, child, family };
 }
 
 export const getActive = query({
   args: { childId: v.id("childProfiles") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const child = await ctx.db.get(args.childId);
     if (!child) return null;
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return null;
+    if (!family || family.clerkUserId !== identity.subject) return null;
 
     return ctx.db
       .query("learningSessions")
@@ -45,14 +44,14 @@ export const getByChild = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     const child = await ctx.db.get(args.childId);
     if (!child) return [];
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return [];
+    if (!family || family.clerkUserId !== identity.subject) return [];
 
     const query = ctx.db
       .query("learningSessions")
@@ -70,8 +69,8 @@ export const getByChild = query({
 export const getById = query({
   args: { sessionId: v.id("learningSessions") },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const session = await ctx.db.get(args.sessionId);
     if (!session) return null;
@@ -80,7 +79,7 @@ export const getById = query({
     if (!child) return null;
 
     const family = await ctx.db.get(child.familyId);
-    if (!family || family.userId !== userId) return null;
+    if (!family || family.clerkUserId !== identity.subject) return null;
 
     return session;
   },

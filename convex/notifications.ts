@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query, action, internalMutation } from "./_generated/server";
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 
 // Subscribe to push notifications (parent)
@@ -16,12 +15,14 @@ export const subscribeParent = mutation({
     deviceName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const clerkUserId = identity.subject;
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", clerkUserId))
       .first();
 
     if (!family) throw new Error("Family not found");
@@ -29,7 +30,7 @@ export const subscribeParent = mutation({
     // Check if this endpoint is already subscribed
     const existing = await ctx.db
       .query("pushSubscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", clerkUserId))
       .collect();
 
     const existingSub = existing.find(
@@ -49,7 +50,7 @@ export const subscribeParent = mutation({
     // Create new subscription
     return ctx.db.insert("pushSubscriptions", {
       recipientType: "parent",
-      userId,
+      clerkUserId,
       familyId: family._id,
       subscription: args.subscription,
       deviceName: args.deviceName,
@@ -131,12 +132,12 @@ export const unsubscribe = mutation({
 // Get parent's subscriptions
 export const getParentSubscriptions = query({
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     return ctx.db
       .query("pushSubscriptions")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .filter((q) => q.eq(q.field("isActive"), true))
       .collect();
   },
@@ -269,12 +270,12 @@ export const triggerTaskNotification = action({
 export const getRecentNotifications = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
 
     const family = await ctx.db
       .query("families")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", identity.subject))
       .first();
 
     if (!family) return [];
