@@ -7,6 +7,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/child-login(.*)",
+  "/today(.*)",      // Child's daily learning view (uses localStorage session, not Clerk)
+  "/session(.*)",    // Learning session (child-facing)
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
