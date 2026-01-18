@@ -43,7 +43,7 @@ function PageContent({ isAuthenticated }: { isAuthenticated: boolean }) {
               <Link
                 href="/login"
                 className="btn-primary text-lg px-8 py-3">
-                Sign In
+                Parent Sign In
               </Link>
               <Link
                 href="/register"
@@ -52,6 +52,19 @@ function PageContent({ isAuthenticated }: { isAuthenticated: boolean }) {
               </Link>
             </>
           )}
+        </div>
+
+        {/* Child Login - always visible */}
+        <div className="mt-6 pt-6 border-t border-gray-200">
+          <p className="text-gray-500 mb-3">Are you a student?</p>
+          <Link
+            href="/child-login"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-blue-500
+                       text-white font-semibold rounded-xl hover:from-purple-600 hover:to-blue-600
+                       transition-all shadow-md hover:shadow-lg">
+            <span className="text-xl">🎒</span>
+            Child Login
+          </Link>
         </div>
       </div>
 
