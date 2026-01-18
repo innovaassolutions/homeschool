@@ -33,6 +33,7 @@ type UploadMode = "recommendations" | "schedule";
 
 interface ScheduleImportResult {
   success: boolean;
+  childId?: string;
   childName?: string;
   gradeLevel?: string;
   diagnosticsCreated?: number;
@@ -325,11 +326,13 @@ export default function IXLPage() {
                       <li>Math skills imported: {scheduleResult.mathSkillsImported}</li>
                       <li>ELA skills imported: {scheduleResult.elaSkillsImported}</li>
                     </ul>
-                    <Link
-                      href="/planner"
-                      className="inline-block mt-3 text-sm text-green-800 font-medium hover:text-green-900">
-                      View Planner &rarr;
-                    </Link>
+                    {scheduleResult.childId && (
+                      <Link
+                        href={`/planner/${scheduleResult.childId}`}
+                        className="inline-block mt-3 text-sm text-green-800 font-medium hover:text-green-900">
+                        View {scheduleResult.childName}&apos;s Planner &rarr;
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>
