@@ -125,6 +125,15 @@ export default function PlannerPage() {
     setShowCopyModal(false);
   }, [childId, copyDay, selectedDay]);
 
+  // Handle copying FROM Monday TO current day
+  const handleCopyFromMonday = useCallback(async () => {
+    await copyDay({
+      childId,
+      fromDayOfWeek: 1, // Monday
+      toDayOfWeek: selectedDay,
+    });
+  }, [childId, copyDay, selectedDay]);
+
   // Handle moving blocks up/down
   const handleMoveBlock = useCallback(async (blockId: string, direction: "up" | "down") => {
     const blockIndex = currentBlocks.findIndex((b) => b.id === blockId);
@@ -240,14 +249,24 @@ export default function PlannerPage() {
             <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
               <div className="text-4xl mb-2">📅</div>
               <p className="text-gray-500">No activities scheduled for {DAYS[selectedDay]}</p>
-              <button
-                onClick={() => {
-                  setEditingBlock(null);
-                  setShowBlockModal(true);
-                }}
-                className="mt-4 text-primary-600 hover:text-primary-700 font-medium">
-                Add your first activity
-              </button>
+              <div className="mt-4 flex flex-col items-center gap-3">
+                <button
+                  onClick={() => {
+                    setEditingBlock(null);
+                    setShowBlockModal(true);
+                  }}
+                  className="text-primary-600 hover:text-primary-700 font-medium">
+                  Add your first activity
+                </button>
+                {/* Quick copy from Monday if Monday has activities and today doesn't */}
+                {selectedDay !== 1 && weeklyPlans?.find((p) => p.dayOfWeek === 1)?.blocks?.length ? (
+                  <button
+                    onClick={handleCopyFromMonday}
+                    className="text-sm text-gray-500 hover:text-gray-700">
+                    or copy from Monday ({weeklyPlans?.find((p) => p.dayOfWeek === 1)?.blocks?.length} blocks)
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : (
             <div className="space-y-3">
