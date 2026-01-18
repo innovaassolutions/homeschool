@@ -43,6 +43,11 @@ interface ScheduleImportResult {
   error?: string;
 }
 
+interface QueuedFile {
+  name: string;
+  content: string;
+}
+
 export default function IXLPage() {
   const ixlStatus = useQuery(api.ixlData.getAllChildrenIxlStatus);
   const children = useQuery(api.childProfiles.list);
@@ -51,33 +56,58 @@ export default function IXLPage() {
 
   const [showUpload, setShowUpload] = useState(false);
   const [uploadMode, setUploadMode] = useState<UploadMode>("schedule");
-  const [markdownContent, setMarkdownContent] = useState("");
+  const [queuedFiles, setQueuedFiles] = useState<QueuedFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingFile, setProcessingFile] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [scheduleResult, setScheduleResult] = useState<ScheduleImportResult | null>(null);
+  const [scheduleResults, setScheduleResults] = useState<ScheduleImportResult[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleFileUpload = useCallback((file: File) => {
-    if (!file.name.endsWith(".md") && !file.name.endsWith(".txt")) {
-      setUploadResult({ success: false, message: "Please upload a .md or .txt file" });
+  const handleFilesUpload = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const validFiles = fileArray.filter(
+      (f) => f.name.endsWith(".md") || f.name.endsWith(".txt")
+    );
+
+    if (validFiles.length === 0) {
+      setUploadResult({ success: false, message: "Please upload .md or .txt files" });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setMarkdownContent(content);
+    // Read all files
+    const readPromises = validFiles.map(
+      (file) =>
+        new Promise<QueuedFile>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            resolve({
+              name: file.name,
+              content: e.target?.result as string,
+            });
+          };
+          reader.readAsText(file);
+        })
+    );
+
+    Promise.all(readPromises).then((newFiles) => {
+      setQueuedFiles((prev) => {
+        // Avoid duplicates by name
+        const existingNames = new Set(prev.map((f) => f.name));
+        const uniqueNew = newFiles.filter((f) => !existingNames.has(f.name));
+        return [...prev, ...uniqueNew];
+      });
       setUploadResult(null);
-    };
-    reader.readAsText(file);
+      setScheduleResults([]);
+    });
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileUpload(file);
-  }, [handleFileUpload]);
+    if (e.dataTransfer.files.length > 0) {
+      handleFilesUpload(e.dataTransfer.files);
+    }
+  }, [handleFilesUpload]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -89,50 +119,76 @@ export default function IXLPage() {
     setIsDragging(false);
   }, []);
 
-  const handleProcessMarkdown = async () => {
-    if (!markdownContent.trim()) {
-      setUploadResult({ success: false, message: "No content to process" });
+  const removeFile = useCallback((fileName: string) => {
+    setQueuedFiles((prev) => prev.filter((f) => f.name !== fileName));
+  }, []);
+
+  const handleProcessAll = async () => {
+    if (queuedFiles.length === 0) {
+      setUploadResult({ success: false, message: "No files to process" });
       return;
     }
 
     setIsProcessing(true);
     setUploadResult(null);
-    setScheduleResult(null);
+    setScheduleResults([]);
 
-    try {
-      if (uploadMode === "schedule") {
-        const result = await importSchedule({ markdownContent });
-        if (result.success) {
-          setScheduleResult(result as ScheduleImportResult);
-          setUploadResult({
-            success: true,
-            message: `Successfully imported schedule for ${result.childName}`,
-          });
+    const results: ScheduleImportResult[] = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const file of queuedFiles) {
+      setProcessingFile(file.name);
+      try {
+        if (uploadMode === "schedule") {
+          const result = await importSchedule({ markdownContent: file.content });
+          results.push(result as ScheduleImportResult);
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
         } else {
-          setUploadResult({
-            success: false,
-            message: result.error || "Failed to import schedule",
+          const result = await importRecommendations({ markdownContent: file.content });
+          results.push({
+            success: true,
+            childName: `${result.childrenUpdated} children`,
           });
+          successCount++;
         }
-        setMarkdownContent("");
-      } else {
-        const result = await importRecommendations({ markdownContent });
-        setUploadResult({
-          success: true,
-          message: `Successfully imported recommendations for ${result.childrenUpdated} children`,
+      } catch (error) {
+        console.error(`Failed to process ${file.name}:`, error);
+        results.push({
+          success: false,
+          error: error instanceof Error ? error.message : "Failed to process file",
+          childName: file.name,
         });
-        setMarkdownContent("");
-        setShowUpload(false);
+        failCount++;
       }
-    } catch (error) {
-      console.error("Failed to process markdown:", error);
+    }
+
+    setProcessingFile(null);
+    setScheduleResults(results);
+    setQueuedFiles([]);
+
+    if (failCount === 0) {
+      setUploadResult({
+        success: true,
+        message: `Successfully imported ${successCount} schedule${successCount !== 1 ? "s" : ""}`,
+      });
+    } else if (successCount === 0) {
       setUploadResult({
         success: false,
-        message: error instanceof Error ? error.message : "Failed to process file",
+        message: `Failed to import ${failCount} file${failCount !== 1 ? "s" : ""}`,
       });
-    } finally {
-      setIsProcessing(false);
+    } else {
+      setUploadResult({
+        success: true,
+        message: `Imported ${successCount} schedule${successCount !== 1 ? "s" : ""}, ${failCount} failed`,
+      });
     }
+
+    setIsProcessing(false);
   };
 
   return (
@@ -252,53 +308,77 @@ export default function IXLPage() {
               }`}>
               <div className="text-4xl mb-3">📄</div>
               <p className="text-gray-600 mb-2">
-                Drag and drop your markdown file here, or
+                Drag and drop your schedule files here, or
               </p>
               <label className="btn-secondary cursor-pointer inline-block">
                 Browse Files
                 <input
                   type="file"
                   accept=".md,.txt"
+                  multiple
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileUpload(file);
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFilesUpload(e.target.files);
+                    }
+                    e.target.value = ""; // Reset to allow re-selecting same files
                   }}
                   className="hidden"
                 />
               </label>
+              <p className="text-xs text-gray-400 mt-2">
+                You can select multiple files at once
+              </p>
             </div>
 
-            {/* Preview */}
-            {markdownContent && (
+            {/* Queued Files */}
+            {queuedFiles.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-gray-900">Preview</h3>
-                  <span className="text-sm text-gray-500">
-                    {markdownContent.length} characters
-                  </span>
-                </div>
-                <div className="bg-gray-50 border rounded-lg p-4 max-h-64 overflow-y-auto">
-                  <pre className="text-sm text-gray-700 whitespace-pre-wrap font-mono">
-                    {markdownContent.slice(0, 2000)}
-                    {markdownContent.length > 2000 && "\n\n... (truncated)"}
-                  </pre>
-                </div>
-                <div className="flex gap-3">
+                  <h3 className="font-medium text-gray-900">
+                    Files to Import ({queuedFiles.length})
+                  </h3>
                   <button
-                    onClick={() => {
-                      setMarkdownContent("");
-                      setUploadResult(null);
-                    }}
-                    className="btn-secondary">
-                    Clear
-                  </button>
-                  <button
-                    onClick={handleProcessMarkdown}
-                    disabled={isProcessing}
-                    className="btn-primary flex-1 disabled:opacity-50">
-                    {isProcessing ? "Processing..." : "Import Recommendations"}
+                    onClick={() => setQueuedFiles([])}
+                    className="text-sm text-gray-500 hover:text-gray-700">
+                    Clear All
                   </button>
                 </div>
+                <div className="space-y-2">
+                  {queuedFiles.map((file) => (
+                    <div
+                      key={file.name}
+                      className={`flex items-center justify-between p-3 rounded-lg border ${
+                        processingFile === file.name
+                          ? "bg-blue-50 border-blue-200"
+                          : "bg-gray-50 border-gray-200"
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">📄</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          {file.name}
+                        </span>
+                        {processingFile === file.name && (
+                          <span className="text-xs text-blue-600">Processing...</span>
+                        )}
+                      </div>
+                      {!isProcessing && (
+                        <button
+                          onClick={() => removeFile(file.name)}
+                          className="text-gray-400 hover:text-gray-600">
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={handleProcessAll}
+                  disabled={isProcessing}
+                  className="btn-primary w-full disabled:opacity-50">
+                  {isProcessing
+                    ? `Processing ${processingFile || "..."}`
+                    : `Import ${queuedFiles.length} Schedule${queuedFiles.length !== 1 ? "s" : ""}`}
+                </button>
               </div>
             )}
 
@@ -315,24 +395,38 @@ export default function IXLPage() {
                   {uploadResult.success ? "✓ " : "✗ "}{uploadResult.message}
                 </p>
 
-                {/* Detailed schedule import results */}
-                {scheduleResult && scheduleResult.success && (
-                  <div className="mt-3 pt-3 border-t border-green-200">
-                    <p className="text-sm text-green-700 font-medium mb-2">Import Summary:</p>
-                    <ul className="text-sm text-green-700 space-y-1">
-                      <li>Child: {scheduleResult.childName} ({scheduleResult.gradeLevel})</li>
-                      <li>Diagnostics created: {scheduleResult.diagnosticsCreated}</li>
-                      <li>Weekly plans created/updated: {scheduleResult.weeklyPlansCreated}</li>
-                      <li>Math skills imported: {scheduleResult.mathSkillsImported}</li>
-                      <li>ELA skills imported: {scheduleResult.elaSkillsImported}</li>
-                    </ul>
-                    {scheduleResult.childId && (
-                      <Link
-                        href={`/planner/${scheduleResult.childId}`}
-                        className="inline-block mt-3 text-sm text-green-800 font-medium hover:text-green-900">
-                        View {scheduleResult.childName}&apos;s Planner &rarr;
-                      </Link>
-                    )}
+                {/* Detailed schedule import results for multiple files */}
+                {scheduleResults.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-green-200 space-y-4">
+                    {scheduleResults.map((result, index) => (
+                      <div key={index} className={`p-3 rounded-lg ${
+                        result.success ? "bg-green-100" : "bg-red-100"
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-sm font-medium ${
+                            result.success ? "text-green-800" : "text-red-800"
+                          }`}>
+                            {result.success ? "✓" : "✗"} {result.childName}
+                            {result.gradeLevel && ` (${result.gradeLevel})`}
+                          </p>
+                          {result.success && result.childId && (
+                            <Link
+                              href={`/planner/${result.childId}`}
+                              className="text-xs text-green-700 hover:text-green-900 font-medium">
+                              View Planner &rarr;
+                            </Link>
+                          )}
+                        </div>
+                        {result.success ? (
+                          <ul className="text-xs text-green-700 mt-1 space-y-0.5">
+                            <li>{result.diagnosticsCreated} diagnostics • {result.weeklyPlansCreated} daily plans</li>
+                            <li>{result.mathSkillsImported} math skills • {result.elaSkillsImported} ELA skills</li>
+                          </ul>
+                        ) : (
+                          <p className="text-xs text-red-700 mt-1">{result.error}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
