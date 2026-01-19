@@ -310,6 +310,54 @@ export const heartbeat = mutation({
   },
 });
 
+// Reset current block timer (for parent/admin use)
+export const resetCurrentBlock = mutation({
+  args: {
+    childId: v.id("childProfiles"),
+  },
+  handler: async (ctx, { childId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    // Verify parent owns this child
+    const child = await ctx.db.get(childId);
+    if (!child) throw new Error("Child not found");
+
+    const family = await ctx.db.get(child.familyId);
+    if (!family || family.clerkUserId !== identity.subject) {
+      throw new Error("Not authorized");
+    }
+
+    const today = getTodayString();
+    const progress = await ctx.db
+      .query("dailyProgress")
+      .withIndex("by_child_date", (q) =>
+        q.eq("childId", childId).eq("date", today)
+      )
+      .first();
+
+    if (!progress) throw new Error("No progress found for today");
+
+    const currentBlock = progress.blocks[progress.currentBlockIndex];
+    if (!currentBlock || currentBlock.status !== "in_progress") {
+      throw new Error("No block currently in progress");
+    }
+
+    // Reset the startedAt time to now
+    const updatedBlocks = [...progress.blocks];
+    updatedBlocks[progress.currentBlockIndex] = {
+      ...updatedBlocks[progress.currentBlockIndex],
+      startedAt: Date.now(),
+    };
+
+    await ctx.db.patch(progress._id, {
+      blocks: updatedBlocks,
+    });
+
+    return { success: true };
+  },
+});
+
 // Skip a block
 export const skipBlock = mutation({
   args: {

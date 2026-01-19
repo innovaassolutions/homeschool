@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import type { Id } from "@/convex/_generated/dataModel";
 
 // Subject display info
 const SUBJECT_INFO: Record<string, { emoji: string; name: string; color: string }> = {
@@ -42,6 +43,9 @@ function getActivityStatus(
 export default function StatusPage() {
   const childrenProgress = useQuery(api.dailyProgress.getAllChildrenTodayProgress);
   const recentNotifications = useQuery(api.notifications.getRecentNotifications, { limit: 10 });
+  const resetCurrentBlock = useMutation(api.dailyProgress.resetCurrentBlock);
+
+  const [resettingChildId, setResettingChildId] = useState<Id<"childProfiles"> | null>(null);
 
   // Force re-render every 10 seconds to update activity status
   const [, setTick] = useState(0);
@@ -49,6 +53,15 @@ export default function StatusPage() {
     const interval = setInterval(() => setTick((t) => t + 1), 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleResetTimer = async (childId: Id<"childProfiles">) => {
+    setResettingChildId(childId);
+    try {
+      await resetCurrentBlock({ childId });
+    } finally {
+      setResettingChildId(null);
+    }
+  };
 
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -185,11 +198,21 @@ export default function StatusPage() {
                             : `Working on ${currentBlockInfo.name}`}
                         </span>
                       </div>
-                      {lastSeenText && (
-                        <span className="text-xs text-gray-500">
-                          Last seen: {lastSeenText}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {lastSeenText && (
+                          <span className="text-xs text-gray-500">
+                            Last seen: {lastSeenText}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleResetTimer(child.childId)}
+                          disabled={resettingChildId === child.childId}
+                          className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded-lg
+                                     hover:bg-gray-300 transition-colors disabled:opacity-50"
+                          title="Reset timer to full duration">
+                          {resettingChildId === child.childId ? "..." : "🔄 Reset"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
