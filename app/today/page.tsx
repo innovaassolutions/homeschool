@@ -71,6 +71,22 @@ export default function TodayPage() {
   const initializeToday = useMutation(api.dailyProgress.initializeToday);
   const startBlock = useMutation(api.dailyProgress.startBlock);
   const completeBlock = useMutation(api.dailyProgress.completeBlock);
+  const heartbeat = useMutation(api.dailyProgress.heartbeat);
+
+  // Heartbeat - update lastSeen every 30 seconds so parents can see activity
+  useEffect(() => {
+    if (!childSession) return;
+
+    // Send initial heartbeat
+    heartbeat({ childId: childSession.childId });
+
+    // Send heartbeat every 30 seconds
+    const interval = setInterval(() => {
+      heartbeat({ childId: childSession.childId });
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [childSession, heartbeat]);
 
   // Get current block
   const currentBlockIndex = todayData?.progress?.currentBlockIndex ?? 0;

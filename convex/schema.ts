@@ -204,6 +204,7 @@ export default defineSchema({
     ),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
+    lastSeen: v.optional(v.number()), // Heartbeat - last time child was active on /today page
   })
     .index("by_child", ["childId"])
     .index("by_child_date", ["childId", "date"])

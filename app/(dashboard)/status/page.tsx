@@ -3,30 +3,55 @@
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 // Subject display info
-const SUBJECT_INFO: Record<string, { emoji: string; name: string }> = {
-  math: { emoji: "📐", name: "Math" },
-  ela: { emoji: "📚", name: "Language Arts" },
-  science: { emoji: "🔬", name: "Science" },
-  history: { emoji: "🏛️", name: "History" },
+const SUBJECT_INFO: Record<string, { emoji: string; name: string; color: string }> = {
+  math: { emoji: "📐", name: "Math", color: "text-blue-600" },
+  ela: { emoji: "📚", name: "Language Arts", color: "text-purple-600" },
+  science: { emoji: "🔬", name: "Science", color: "text-green-600" },
+  history: { emoji: "🏛️", name: "History", color: "text-amber-600" },
 };
+
+// Check if child is "active" (heartbeat within last 60 seconds)
+const ACTIVE_THRESHOLD_MS = 60 * 1000;
+
+type ActivityStatus = "active" | "away" | "completed" | "not_started" | "no_schedule";
+
+function getActivityStatus(
+  lastSeen: number | undefined,
+  overallStatus: string,
+  hasSchedule: boolean
+): ActivityStatus {
+  if (!hasSchedule) return "no_schedule";
+  if (overallStatus === "completed") return "completed";
+  if (overallStatus === "not_started") return "not_started";
+
+  // Child is in_progress - check lastSeen
+  if (lastSeen) {
+    const timeSinceLastSeen = Date.now() - lastSeen;
+    if (timeSinceLastSeen < ACTIVE_THRESHOLD_MS) {
+      return "active";
+    }
+    return "away";
+  }
+
+  return "away";
+}
 
 export default function StatusPage() {
   const childrenProgress = useQuery(api.dailyProgress.getAllChildrenTodayProgress);
   const recentNotifications = useQuery(api.notifications.getRecentNotifications, { limit: 10 });
 
+  // Force re-render every 10 seconds to update activity status
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   const formatTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  };
-
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours > 0) {
-      return `${hours}h ${mins}m`;
-    }
-    return `${mins}m`;
   };
 
   return (
@@ -56,28 +81,55 @@ export default function StatusPage() {
       <div className="grid gap-6
                       lg:grid-cols-2">
         {childrenProgress?.map((child) => {
-          const completedBlocks = child.blocks?.filter(
-            (b) => b.status === "completed"
-          ).length ?? 0;
-          const totalBlocks = child.blocks?.length ?? 0;
-          const progressPercent = totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
+          const progressPercent = child.totalBlocks > 0 ? Math.round((child.completedCount / child.totalBlocks) * 100) : 0;
 
-          const isActive = child.overallStatus === "in_progress";
-          const isCompleted = child.overallStatus === "completed";
-          const notStarted = child.overallStatus === "not_started";
+          const activityStatus = getActivityStatus(
+            child.lastSeen,
+            child.overallStatus,
+            child.hasSchedule
+          );
+
+          const isActive = activityStatus === "active";
+          const isAway = activityStatus === "away";
+          const isCompleted = activityStatus === "completed";
+          const notStarted = activityStatus === "not_started";
+          const noSchedule = activityStatus === "no_schedule";
+
+          // Format last seen time
+          const lastSeenText = child.lastSeen
+            ? (() => {
+                const diffMs = Date.now() - child.lastSeen;
+                const diffMins = Math.floor(diffMs / 60000);
+                if (diffMins < 1) return "Just now";
+                if (diffMins === 1) return "1 min ago";
+                if (diffMins < 60) return `${diffMins} mins ago`;
+                return formatTime(child.lastSeen);
+              })()
+            : null;
+
+          // Get current block info for display
+          const currentBlockInfo = child.currentBlock
+            ? SUBJECT_INFO[child.currentBlock.subject ?? ""] || {
+                emoji: child.currentBlock.type === "break" ? "☕" : "📖",
+                name: child.currentBlock.type === "break" ? "Break" : child.currentBlock.subject || "Activity",
+                color: "text-gray-600",
+              }
+            : null;
 
           return (
             <div
               key={child.childId}
               className={`bg-white rounded-lg shadow overflow-hidden ${
-                isActive ? "ring-2 ring-blue-500" : ""
+                isActive ? "ring-2 ring-green-500" : isAway ? "ring-2 ring-yellow-500" : ""
               }`}>
               {/* Header */}
               <div className={`p-4 ${
                 isCompleted
                   ? "bg-green-50"
                   : isActive
-                  ? "bg-blue-50"
+                  ? "bg-green-50"
+                  : isAway
+                  ? "bg-yellow-50"
                   : "bg-gray-50"
               }`}>
                 <div className="flex items-center justify-between">
@@ -95,33 +147,59 @@ export default function StatusPage() {
                   <div className="text-right">
                     {isCompleted && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                        <span>✓</span> Done!
+                        <span>🏆</span> Done!
                       </span>
                     )}
                     {isActive && (
-                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium animate-pulse">
-                        <span className="w-2 h-2 bg-blue-500 rounded-full"></span> Active
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                        <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span> Active
                       </span>
                     )}
-                    {notStarted && totalBlocks > 0 && (
+                    {isAway && (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                        <span className="w-2 h-2 bg-yellow-500 rounded-full"></span> Away
+                      </span>
+                    )}
+                    {notStarted && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">
                         Not started
                       </span>
                     )}
-                    {totalBlocks === 0 && (
+                    {noSchedule && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
                         No schedule
                       </span>
                     )}
                   </div>
                 </div>
+
+                {/* Current activity display when active/away */}
+                {(isActive || isAway) && currentBlockInfo && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">{currentBlockInfo.emoji}</span>
+                        <span className={`font-medium ${currentBlockInfo.color}`}>
+                          {child.currentBlock?.type === "break"
+                            ? `Break time (${child.currentBlock?.durationMinutes}m)`
+                            : `Working on ${currentBlockInfo.name}`}
+                        </span>
+                      </div>
+                      {lastSeenText && (
+                        <span className="text-xs text-gray-500">
+                          Last seen: {lastSeenText}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Progress bar */}
-              {totalBlocks > 0 && (
+              {child.totalBlocks > 0 && (
                 <div className="px-4 py-2 bg-gray-100">
                   <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                    <span>{completedBlocks} of {totalBlocks} activities</span>
+                    <span>{child.completedCount} of {child.totalBlocks} activities</span>
                     <span>{progressPercent}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -135,67 +213,20 @@ export default function StatusPage() {
                 </div>
               )}
 
-              {/* Block list */}
-              {child.blocks && child.blocks.length > 0 && (
-                <div className="p-4">
-                  <div className="space-y-2">
-                    {child.blocks.map((block, index) => {
-                      // Get block details from weekly plan if available
-                      const subjectInfo = SUBJECT_INFO[block.blockId.split("-")[0]] || {
-                        emoji: block.status === "completed" ? "✓" : "⏳",
-                        name: `Block ${index + 1}`,
-                      };
-
-                      return (
-                        <div
-                          key={block.blockId}
-                          className={`flex items-center gap-3 p-2 rounded-lg ${
-                            block.status === "completed"
-                              ? "bg-green-50"
-                              : block.status === "in_progress"
-                              ? "bg-blue-50"
-                              : block.status === "skipped"
-                              ? "bg-gray-100"
-                              : "bg-white"
-                          }`}>
-                          <span className="text-xl">
-                            {block.status === "completed"
-                              ? "✅"
-                              : block.status === "in_progress"
-                              ? "▶️"
-                              : block.status === "skipped"
-                              ? "⏭️"
-                              : "⬜"}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${
-                              block.status === "completed" ? "text-green-700" :
-                              block.status === "in_progress" ? "text-blue-700" :
-                              "text-gray-600"
-                            }`}>
-                              {subjectInfo.name}
-                            </p>
-                            {block.startedAt && (
-                              <p className="text-xs text-gray-400">
-                                Started at {formatTime(block.startedAt)}
-                                {block.completedAt && ` - Completed at ${formatTime(block.completedAt)}`}
-                              </p>
-                            )}
-                          </div>
-                          {block.actualDurationMinutes !== undefined && (
-                            <span className="text-xs text-gray-500">
-                              {formatDuration(block.actualDurationMinutes)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+              {/* Session times */}
+              {(child.startedAt || child.completedAt) && (
+                <div className="px-4 py-2 flex items-center gap-4 text-xs text-gray-500">
+                  {child.startedAt && (
+                    <span>Started: {formatTime(child.startedAt)}</span>
+                  )}
+                  {child.completedAt && (
+                    <span>Completed: {formatTime(child.completedAt)}</span>
+                  )}
                 </div>
               )}
 
               {/* No schedule message */}
-              {(!child.blocks || child.blocks.length === 0) && (
+              {!child.hasSchedule && (
                 <div className="p-4 text-center">
                   <p className="text-gray-500 text-sm">No activities scheduled for today</p>
                   <Link
@@ -207,7 +238,7 @@ export default function StatusPage() {
               )}
 
               {/* Footer with link to planner */}
-              {child.blocks && child.blocks.length > 0 && (
+              {child.hasSchedule && (
                 <div className="px-4 py-3 bg-gray-50 border-t">
                   <Link
                     href={`/planner/${child.childId}`}

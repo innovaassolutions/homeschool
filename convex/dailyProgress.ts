@@ -67,6 +67,13 @@ export const getAllChildrenTodayProgress = query({
     if (!family) return [];
 
     const today = getTodayString();
+    const dayOfWeek = new Date().getDay();
+
+    // Get all children
+    const children = await ctx.db
+      .query("childProfiles")
+      .withIndex("by_family", (q) => q.eq("familyId", family._id))
+      .collect();
 
     // Get all progress for this family today
     const allProgress = await ctx.db
@@ -76,43 +83,62 @@ export const getAllChildrenTodayProgress = query({
       )
       .collect();
 
-    // Get child info for each progress record
-    const progressWithChildren = await Promise.all(
-      allProgress.map(async (progress) => {
-        const child = await ctx.db.get(progress.childId);
+    // Build status for each child
+    const results = await Promise.all(
+      children.map(async (child) => {
+        const progress = allProgress.find((p) => p.childId === child._id);
+
+        // Get weekly plan to show current activity details
+        const weeklyPlan = await ctx.db
+          .query("weeklyPlans")
+          .withIndex("by_child_day", (q) =>
+            q.eq("childId", child._id).eq("dayOfWeek", dayOfWeek)
+          )
+          .first();
+
+        // Get current block info
+        let currentBlock = null;
+        let currentBlockStatus = null;
+        if (weeklyPlan && progress) {
+          const planBlock = weeklyPlan.blocks[progress.currentBlockIndex];
+          const progressBlock = progress.blocks[progress.currentBlockIndex];
+          if (planBlock) {
+            currentBlock = {
+              type: planBlock.type,
+              subject: planBlock.subject,
+              durationMinutes: planBlock.durationMinutes,
+              instructions: planBlock.instructions,
+            };
+            currentBlockStatus = progressBlock?.status ?? "pending";
+          }
+        }
+
+        // Calculate completed count
+        const completedCount = progress?.blocks.filter(
+          (b) => b.status === "completed" || b.status === "skipped"
+        ).length ?? 0;
+        const totalBlocks = weeklyPlan?.blocks.length ?? 0;
+
         return {
-          ...progress,
-          childName: child?.name ?? "Unknown",
-          childAgeGroup: child?.ageGroup,
-          childAvatarEmoji: child?.avatarEmoji ?? "👤",
+          childId: child._id,
+          childName: child.name,
+          childAgeGroup: child.ageGroup,
+          childAvatarEmoji: child.avatarEmoji ?? "👤",
+          hasSchedule: !!weeklyPlan && weeklyPlan.blocks.length > 0,
+          overallStatus: progress?.overallStatus ?? "not_started",
+          currentBlockIndex: progress?.currentBlockIndex ?? 0,
+          currentBlock,
+          currentBlockStatus,
+          completedCount,
+          totalBlocks,
+          startedAt: progress?.startedAt,
+          completedAt: progress?.completedAt,
+          lastSeen: progress?.lastSeen,
         };
       })
     );
 
-    // Also get children without progress today
-    const children = await ctx.db
-      .query("childProfiles")
-      .withIndex("by_family", (q) => q.eq("familyId", family._id))
-      .collect();
-
-    const childrenWithoutProgress = children.filter(
-      (child) => !allProgress.some((p) => p.childId === child._id)
-    );
-
-    // Add them with empty progress
-    const emptyProgress = childrenWithoutProgress.map((child) => ({
-      childId: child._id,
-      familyId: family._id,
-      date: today,
-      blocks: [],
-      currentBlockIndex: 0,
-      overallStatus: "not_started" as const,
-      childName: child.name,
-      childAgeGroup: child.ageGroup,
-      childAvatarEmoji: child.avatarEmoji ?? "👤",
-    }));
-
-    return [...progressWithChildren, ...emptyProgress];
+    return results;
   },
 });
 
@@ -260,6 +286,27 @@ export const completeBlock = mutation({
       allCompleted,
       nextBlockIndex,
     };
+  },
+});
+
+// Heartbeat - update lastSeen timestamp (called periodically from child's /today page)
+export const heartbeat = mutation({
+  args: { childId: v.id("childProfiles") },
+  handler: async (ctx, { childId }) => {
+    const today = getTodayString();
+
+    const progress = await ctx.db
+      .query("dailyProgress")
+      .withIndex("by_child_date", (q) =>
+        q.eq("childId", childId).eq("date", today)
+      )
+      .first();
+
+    if (progress) {
+      await ctx.db.patch(progress._id, {
+        lastSeen: Date.now(),
+      });
+    }
   },
 });
 
