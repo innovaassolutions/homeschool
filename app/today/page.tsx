@@ -164,6 +164,13 @@ export default function TodayPage() {
     }
   }, [childSession, currentBlock, completeBlock]);
 
+  // Handle resetting timer (for interruptions)
+  const handleResetTimer = useCallback(() => {
+    if (!currentBlock) return;
+    setTimeRemaining(currentBlock.durationMinutes * 60);
+    setIsTimerRunning(true);
+  }, [currentBlock]);
+
   // Handle logout
   const handleLogout = () => {
     localStorage.removeItem("childSession");
@@ -322,12 +329,20 @@ export default function TodayPage() {
               )}
 
               {currentBlock.status === "in_progress" && (
-                <button
-                  onClick={handleComplete}
-                  className="w-full py-4 bg-blue-500 text-white text-xl font-semibold rounded-xl
-                             hover:bg-blue-600 transition-colors">
-                  Break Done!
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleComplete}
+                    className="w-full py-4 bg-blue-500 text-white text-xl font-semibold rounded-xl
+                               hover:bg-blue-600 transition-colors">
+                    Break Done!
+                  </button>
+                  <button
+                    onClick={handleResetTimer}
+                    className="w-full py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-xl
+                               hover:bg-gray-300 transition-colors flex items-center justify-center gap-2">
+                    🔄 Reset Timer
+                  </button>
+                </div>
               )}
 
               <p className="text-sm text-gray-500">
@@ -364,12 +379,20 @@ export default function TodayPage() {
 
               {/* In progress */}
               {currentBlock?.status === "in_progress" && (
-                <button
-                  onClick={handleComplete}
-                  className="w-full py-4 bg-green-500 text-white text-xl font-semibold rounded-xl
-                             hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
-                  ✓ I'M DONE
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleComplete}
+                    className="w-full py-4 bg-green-500 text-white text-xl font-semibold rounded-xl
+                               hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
+                    ✓ I'M DONE
+                  </button>
+                  <button
+                    onClick={handleResetTimer}
+                    className="w-full py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-xl
+                               hover:bg-gray-300 transition-colors flex items-center justify-center gap-2">
+                    🔄 Reset Timer
+                  </button>
+                </div>
               )}
             </div>
           )}
