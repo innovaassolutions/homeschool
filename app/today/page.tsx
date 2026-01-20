@@ -71,8 +71,8 @@ type ChildSession = {
 export default function TodayPage() {
   const router = useRouter();
   const [childSession, setChildSession] = useState<ChildSession | null>(null);
+  const [timerEndTime, setTimerEndTime] = useState<number | null>(null); // Timestamp when timer should end
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
 
   // Notification hook
@@ -141,34 +141,46 @@ export default function TodayPage() {
   // Track if sound was played for current timer session
   const soundPlayedRef = useRef(false);
 
-  // Reset sound flag when timer is reset or new block starts
+  // Timer logic - uses timestamps to handle background tab throttling
   useEffect(() => {
-    if (timeRemaining !== null && timeRemaining > 0) {
-      soundPlayedRef.current = false;
+    if (timerEndTime === null) {
+      setTimeRemaining(null);
+      return;
     }
-  }, [timeRemaining]);
 
-  // Timer logic
-  useEffect(() => {
-    if (!isTimerRunning || timeRemaining === null) return;
+    // Reset sound flag when new timer starts
+    soundPlayedRef.current = false;
 
-    const interval = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev === null || prev <= 0) {
-          setIsTimerRunning(false);
-          // Play sound when timer completes
-          if (!soundPlayedRef.current) {
-            soundPlayedRef.current = true;
-            playTimerCompleteSound();
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const updateTimer = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((timerEndTime - now) / 1000));
+      setTimeRemaining(remaining);
 
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timeRemaining]);
+      if (remaining <= 0 && !soundPlayedRef.current) {
+        soundPlayedRef.current = true;
+        playTimerCompleteSound();
+      }
+    };
+
+    // Update immediately
+    updateTimer();
+
+    // Update every second (will auto-correct if browser throttles)
+    const interval = setInterval(updateTimer, 1000);
+
+    // Also update when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        updateTimer();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [timerEndTime]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number): string => {
@@ -186,9 +198,9 @@ export default function TodayPage() {
       blockId: currentBlock.id,
     });
 
-    // Set timer
-    setTimeRemaining(currentBlock.durationMinutes * 60);
-    setIsTimerRunning(true);
+    // Set timer using end timestamp (handles background tabs correctly)
+    const durationMs = currentBlock.durationMinutes * 60 * 1000;
+    setTimerEndTime(Date.now() + durationMs);
 
     // Open IXL in new tab if it's a lesson
     if (currentBlock.type === "lesson" && currentBlock.resource?.url) {
@@ -203,8 +215,7 @@ export default function TodayPage() {
   const handleComplete = useCallback(async () => {
     if (!childSession || !currentBlock) return;
 
-    setIsTimerRunning(false);
-    setTimeRemaining(null);
+    setTimerEndTime(null);
 
     const result = await completeBlock({
       childId: childSession.childId,
@@ -220,8 +231,8 @@ export default function TodayPage() {
   // Handle resetting timer (for interruptions)
   const handleResetTimer = useCallback(() => {
     if (!currentBlock) return;
-    setTimeRemaining(currentBlock.durationMinutes * 60);
-    setIsTimerRunning(true);
+    const durationMs = currentBlock.durationMinutes * 60 * 1000;
+    setTimerEndTime(Date.now() + durationMs);
   }, [currentBlock]);
 
   // Handle logout
