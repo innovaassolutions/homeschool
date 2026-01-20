@@ -463,26 +463,94 @@ export default function TodayPage() {
         </div>
       </main>
 
-      {/* Progress footer */}
-      <footer className="p-4">
+      {/* Schedule list footer */}
+      <footer className="p-4 pb-8">
         <div className="max-w-md mx-auto">
-          <div className="flex justify-center gap-2 mb-2">
-            {allBlocks.map((block, i) => (
-              <div
-                key={block.id}
-                className={`w-4 h-4 rounded-full transition-colors ${
-                  block.status === "completed"
-                    ? "bg-green-500"
-                    : block.status === "skipped"
-                    ? "bg-gray-400"
-                    : block.status === "in_progress"
-                    ? "bg-blue-500 animate-pulse"
-                    : "bg-gray-200"
-                }`}
-              />
-            ))}
+          <h3 className="text-sm font-semibold text-gray-700 mb-3 text-center">
+            Today&apos;s Schedule
+          </h3>
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            {allBlocks.map((block, i) => {
+              const blockSubjectInfo = block.subject
+                ? SUBJECT_INFO[block.subject] || { emoji: "📖", name: block.subject, color: "bg-gray-500" }
+                : { emoji: "☕", name: "Break", color: "bg-green-500" };
+
+              const isCurrentBlock = i === currentBlockIndex;
+              const isPaused = block.status === "in_progress" && timerEndTime === null;
+
+              return (
+                <div
+                  key={block.id}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-gray-100 last:border-b-0 ${
+                    isCurrentBlock ? "bg-blue-50" : ""
+                  }`}>
+                  {/* Status indicator */}
+                  <div className="flex-shrink-0">
+                    {block.status === "completed" && (
+                      <span className="text-lg" title="Complete">✅</span>
+                    )}
+                    {block.status === "skipped" && (
+                      <span className="text-lg" title="Skipped">⏭️</span>
+                    )}
+                    {block.status === "in_progress" && !isPaused && (
+                      <span className="text-lg animate-pulse" title="In Progress">▶️</span>
+                    )}
+                    {block.status === "in_progress" && isPaused && (
+                      <span className="text-lg" title="Paused">⏸️</span>
+                    )}
+                    {block.status === "pending" && (
+                      <span className="text-lg text-gray-300" title="Not Started">⬜</span>
+                    )}
+                  </div>
+
+                  {/* Activity info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span>{blockSubjectInfo.emoji}</span>
+                      <span className={`font-medium ${
+                        block.status === "completed" ? "text-green-700" :
+                        block.status === "in_progress" ? "text-blue-700" :
+                        "text-gray-700"
+                      }`}>
+                        {blockSubjectInfo.name}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500">{block.durationMinutes} min</p>
+                  </div>
+
+                  {/* Status badge */}
+                  <div className="flex-shrink-0">
+                    {block.status === "completed" && (
+                      <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                        Complete
+                      </span>
+                    )}
+                    {block.status === "skipped" && (
+                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full font-medium">
+                        Skipped
+                      </span>
+                    )}
+                    {block.status === "in_progress" && !isPaused && (
+                      <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium animate-pulse">
+                        In Progress
+                      </span>
+                    )}
+                    {block.status === "in_progress" && isPaused && (
+                      <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full font-medium">
+                        Paused
+                      </span>
+                    )}
+                    {block.status === "pending" && (
+                      <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full font-medium">
+                        Not Started
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <p className="text-center text-sm text-gray-600">
+          <p className="text-center text-sm text-gray-600 mt-3">
             {completedCount} of {allBlocks.length} activities complete
           </p>
         </div>
