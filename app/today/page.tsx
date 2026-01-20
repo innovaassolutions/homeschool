@@ -1,11 +1,49 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useChildNotifications } from "@/hooks/useNotifications";
+
+// Play a pleasant chime sound using Web Audio API
+function playTimerCompleteSound() {
+  try {
+    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+
+    // Create a pleasant bell/chime sound with multiple harmonics
+    const playTone = (frequency: number, startTime: number, duration: number, volume: number) => {
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = frequency;
+      oscillator.type = "sine";
+
+      // Bell-like envelope: quick attack, gradual decay
+      gainNode.gain.setValueAtTime(0, audioContext.currentTime + startTime);
+      gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + startTime + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + startTime + duration);
+
+      oscillator.start(audioContext.currentTime + startTime);
+      oscillator.stop(audioContext.currentTime + startTime + duration);
+    };
+
+    // Play a pleasant three-note chime (C5, E5, G5 - major chord)
+    playTone(523.25, 0, 0.8, 0.3);      // C5
+    playTone(659.25, 0.15, 0.7, 0.25);  // E5
+    playTone(783.99, 0.3, 0.9, 0.3);    // G5
+
+    // Add a second higher chime for emphasis
+    playTone(1046.50, 0.5, 1.0, 0.2);   // C6
+
+  } catch (error) {
+    console.log("Could not play sound:", error);
+  }
+}
 
 // IXL subject URLs
 const IXL_URLS: Record<string, string> = {
@@ -100,6 +138,16 @@ export default function TodayPage() {
     }
   }, [todayData, childSession, initializeToday]);
 
+  // Track if sound was played for current timer session
+  const soundPlayedRef = useRef(false);
+
+  // Reset sound flag when timer is reset or new block starts
+  useEffect(() => {
+    if (timeRemaining !== null && timeRemaining > 0) {
+      soundPlayedRef.current = false;
+    }
+  }, [timeRemaining]);
+
   // Timer logic
   useEffect(() => {
     if (!isTimerRunning || timeRemaining === null) return;
@@ -108,6 +156,11 @@ export default function TodayPage() {
       setTimeRemaining((prev) => {
         if (prev === null || prev <= 0) {
           setIsTimerRunning(false);
+          // Play sound when timer completes
+          if (!soundPlayedRef.current) {
+            soundPlayedRef.current = true;
+            playTimerCompleteSound();
+          }
           return 0;
         }
         return prev - 1;
