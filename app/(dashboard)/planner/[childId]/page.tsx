@@ -58,6 +58,25 @@ export default function PlannerPage() {
   const weeklyPlans = useQuery(api.weeklyPlans.getByChild, { childId });
   const dayPlan = weeklyPlans?.find((p) => p.dayOfWeek === selectedDay);
 
+  // Get today's date info for progress display
+  const today = new Date();
+  const todayDayOfWeek = today.getDay();
+  const todayDateString = today.toISOString().split("T")[0];
+  const isSelectedDayToday = selectedDay === todayDayOfWeek;
+
+  // Query today's progress (only meaningful if viewing today's schedule)
+  const todayProgress = useQuery(
+    api.dailyProgress.getByChildAndDate,
+    isSelectedDayToday ? { childId, date: todayDateString } : "skip"
+  );
+
+  // Helper to get block status from progress
+  const getBlockStatus = (blockId: string): "pending" | "in_progress" | "completed" | "skipped" | null => {
+    if (!isSelectedDayToday || !todayProgress) return null;
+    const progressBlock = todayProgress.blocks?.find((b) => b.blockId === blockId);
+    return progressBlock?.status ?? "pending";
+  };
+
   // Mutations
   const upsertPlan = useMutation(api.weeklyPlans.upsert);
   const removeBlock = useMutation(api.weeklyPlans.removeBlock);
@@ -227,10 +246,22 @@ export default function PlannerPage() {
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">{DAYS[selectedDay]}</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">{DAYS[selectedDay]}</h2>
+                {isSelectedDayToday && (
+                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                    Today
+                  </span>
+                )}
+              </div>
               {totalMinutes > 0 && (
                 <p className="text-sm text-gray-500">
                   Total: {hours > 0 ? `${hours}h ` : ""}{minutes > 0 ? `${minutes}m` : ""}
+                  {isSelectedDayToday && todayProgress && (
+                    <span className="ml-2 text-green-600">
+                      • {todayProgress.blocks?.filter((b) => b.status === "completed" || b.status === "skipped").length ?? 0}/{currentBlocks.length} complete
+                    </span>
+                  )}
                 </p>
               )}
             </div>
@@ -272,12 +303,17 @@ export default function PlannerPage() {
             <div className="space-y-3">
               {currentBlocks.map((block, index) => {
                 const subject = SUBJECTS.find((s) => s.id === block.subject);
+                const blockStatus = getBlockStatus(block.id);
 
                 return (
                   <div
                     key={block.id}
                     className={`flex items-center gap-4 p-4 rounded-lg border ${
-                      block.type === "break"
+                      blockStatus === "in_progress"
+                        ? "bg-blue-50 border-blue-300 ring-2 ring-blue-200"
+                        : blockStatus === "completed"
+                        ? "bg-green-50 border-green-200"
+                        : block.type === "break"
                         ? "bg-green-50 border-green-200"
                         : "bg-white border-gray-200"
                     }`}>
@@ -296,6 +332,16 @@ export default function PlannerPage() {
                         ▼
                       </button>
                     </div>
+
+                    {/* Status indicator (only shown for today) */}
+                    {blockStatus !== null && (
+                      <div className="flex-shrink-0">
+                        {blockStatus === "completed" && <span className="text-xl" title="Complete">✅</span>}
+                        {blockStatus === "skipped" && <span className="text-xl" title="Skipped">⏭️</span>}
+                        {blockStatus === "in_progress" && <span className="text-xl animate-pulse" title="In Progress">▶️</span>}
+                        {blockStatus === "pending" && <span className="text-xl text-gray-300" title="Not Started">⬜</span>}
+                      </div>
+                    )}
 
                     {/* Block info */}
                     <div className="flex-1 min-w-0">
@@ -320,6 +366,32 @@ export default function PlannerPage() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Status badge (only shown for today) */}
+                    {blockStatus !== null && (
+                      <div className="flex-shrink-0">
+                        {blockStatus === "completed" && (
+                          <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">
+                            Complete
+                          </span>
+                        )}
+                        {blockStatus === "skipped" && (
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full font-medium">
+                            Skipped
+                          </span>
+                        )}
+                        {blockStatus === "in_progress" && (
+                          <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium animate-pulse">
+                            In Progress
+                          </span>
+                        )}
+                        {blockStatus === "pending" && (
+                          <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded-full font-medium">
+                            Not Started
+                          </span>
+                        )}
+                      </div>
+                    )}
 
                     {/* Duration */}
                     <div className="text-right">
