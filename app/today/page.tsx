@@ -7,10 +7,27 @@ import { useRouter } from "next/navigation";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useChildNotifications } from "@/hooks/useNotifications";
 
+// Global AudioContext to persist across renders and improve reliability
+let globalAudioContext: AudioContext | null = null;
+
+// Get or create the AudioContext, resuming if suspended
+async function getAudioContext(): Promise<AudioContext> {
+  if (!globalAudioContext) {
+    globalAudioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  }
+
+  // Resume if suspended (required after browser tab becomes inactive)
+  if (globalAudioContext.state === "suspended") {
+    await globalAudioContext.resume();
+  }
+
+  return globalAudioContext;
+}
+
 // Play a pleasant chime sound using Web Audio API
-function playTimerCompleteSound() {
+async function playTimerCompleteSound() {
   try {
-    const audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+    const audioContext = await getAudioContext();
 
     // Create a pleasant bell/chime sound with multiple harmonics
     const playTone = (frequency: number, startTime: number, duration: number, volume: number) => {
@@ -138,6 +155,26 @@ export default function TodayPage() {
     }
   }, [todayData, childSession, initializeToday]);
 
+  // Restore timer from backend startedAt when page loads or block changes
+  useEffect(() => {
+    // Only restore if we don't already have an active timer
+    if (timerEndTime !== null) return;
+
+    // Check if current block is in progress and has startedAt
+    if (currentBlock?.status === "in_progress" && currentBlock.startedAt) {
+      const durationMs = currentBlock.durationMinutes * 60 * 1000;
+      const calculatedEndTime = currentBlock.startedAt + durationMs;
+
+      // Only set timer if it hasn't already expired
+      if (calculatedEndTime > Date.now()) {
+        setTimerEndTime(calculatedEndTime);
+      } else {
+        // Timer already expired - set to 0 to trigger sound
+        setTimerEndTime(Date.now() - 1000);
+      }
+    }
+  }, [currentBlock, timerEndTime]);
+
   // Track if sound was played for current timer session
   const soundPlayedRef = useRef(false);
 
@@ -192,6 +229,9 @@ export default function TodayPage() {
   // Handle starting a lesson
   const handleStartLesson = useCallback(async () => {
     if (!childSession || !currentBlock) return;
+
+    // Initialize audio context on user interaction (required by browsers)
+    getAudioContext().catch(() => {});
 
     await startBlock({
       childId: childSession.childId,
