@@ -9,7 +9,11 @@
  * Railway:      npm start  (triggered by a Railway cron job)
  */
 
-import { chromium, type Page } from "playwright";
+import { chromium as chromiumExtra } from "playwright-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import { type Page } from "playwright";
+
+chromiumExtra.use(StealthPlugin());
 import { config } from "dotenv";
 import { resolve } from "path";
 
@@ -72,7 +76,7 @@ interface ChildData {
 async function run() {
   console.log("Starting IXL sync...");
 
-  const browser = await chromium.launch({
+  const browser = await chromiumExtra.launch({
     headless: true,
     args: [
       "--no-sandbox",
@@ -91,11 +95,6 @@ async function run() {
       // Stealth: set realistic locale/timezone
       locale: "en-CA",
       timezoneId: "America/Toronto",
-    });
-
-    // Stealth: remove navigator.webdriver flag that automation detection checks
-    await context.addInitScript(() => {
-      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     });
 
     const page = await context.newPage();
