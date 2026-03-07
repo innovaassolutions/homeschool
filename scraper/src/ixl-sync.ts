@@ -74,14 +74,28 @@ async function run() {
 
   const browser = await chromium.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      // Stealth: hide automation signals
+      "--disable-blink-features=AutomationControlled",
+    ],
   });
 
   try {
     const context = await browser.newContext({
       userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
       viewport: { width: 1280, height: 900 },
+      // Stealth: set realistic locale/timezone
+      locale: "en-CA",
+      timezoneId: "America/Toronto",
+    });
+
+    // Stealth: remove navigator.webdriver flag that automation detection checks
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
     });
 
     const page = await context.newPage();
@@ -176,15 +190,15 @@ async function login(page: Page) {
   // Wait for React to process the events and enable the submit button
   await page.waitForTimeout(1000);
 
-  // Log button state before clicking
+  // Log button state
   const btnDisabled = await page.evaluate(() => {
     const btn = document.getElementById("signin-button") as HTMLButtonElement | null;
     return { disabled: btn?.disabled, text: btn?.textContent?.trim() };
   });
   console.log("Submit button state:", JSON.stringify(btnDisabled));
 
-  // Submit — use force:true as fallback if button is still disabled
-  await page.locator('#signin-button').click({ force: btnDisabled.disabled });
+  // Submit via keyboard Enter on the password field — more natural than button click
+  await page.locator('#sipassword').press('Enter');
 
   // Wait a moment and log what happened
   await page.waitForTimeout(3000);
