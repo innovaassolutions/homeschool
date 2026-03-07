@@ -5,7 +5,7 @@
   "scripts": {
     "start": "tsx src/ixl-sync.ts",
     "dev": "tsx src/ixl-sync.ts",
-    "install-browsers": "playwright install chromium"
+    "postinstall": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
