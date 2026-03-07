@@ -157,19 +157,20 @@ async function login(page: Page) {
 
   // IXL uses React controlled inputs. We must use the native value setter
   // to trigger React's synthetic event system and enable the submit button.
+  // Avoid inner `function` declarations — tsx compiles them with __name()
+  // which doesn't exist in the browser context.
   await page.evaluate(([u, p]: [string, string]) => {
-    function setReactValue(id: string, value: string) {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      if (!el) throw new Error(`Input #${id} not found`);
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype, "value"
-      )?.set;
-      nativeSetter?.call(el, value);
-      el.dispatchEvent(new Event("input", { bubbles: true }));
-      el.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    setReactValue("siusername", u);
-    setReactValue("sipassword", p);
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype, "value"
+    )?.set;
+    const uEl = document.getElementById("siusername") as HTMLInputElement;
+    nativeSetter?.call(uEl, u);
+    uEl.dispatchEvent(new Event("input", { bubbles: true }));
+    uEl.dispatchEvent(new Event("change", { bubbles: true }));
+    const pEl = document.getElementById("sipassword") as HTMLInputElement;
+    nativeSetter?.call(pEl, p);
+    pEl.dispatchEvent(new Event("input", { bubbles: true }));
+    pEl.dispatchEvent(new Event("change", { bubbles: true }));
   }, [USERNAME, PASSWORD] as [string, string]);
 
   // Wait for React to process the events and enable the submit button
