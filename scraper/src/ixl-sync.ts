@@ -124,8 +124,34 @@ async function run() {
 // ---------------------------------------------------------------------------
 
 async function login(page: Page) {
-  console.log(`Navigating to ${BASE_URL}/signin`);
-  await page.goto(`${BASE_URL}/signin`, { waitUntil: "domcontentloaded" });
+  // Ensure no double-slash in URL
+  const signinUrl = BASE_URL.replace(/\/$/, "") + "/signin";
+  console.log(`Navigating to ${signinUrl}`);
+  await page.goto(signinUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
+
+  console.log(`Page URL after load: ${page.url()}`);
+  console.log(`Page title: ${await page.title()}`);
+
+  // Log all input fields found so we can verify selectors
+  const inputs = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("input")).map((i) => ({
+      name: i.name,
+      id: i.id,
+      type: i.type,
+      placeholder: i.placeholder,
+    }))
+  );
+  console.log("Inputs on page:", JSON.stringify(inputs));
+
+  // Log all buttons
+  const buttons = await page.evaluate(() =>
+    Array.from(document.querySelectorAll("button, input[type=submit]")).map((b) => ({
+      text: b.textContent?.trim().slice(0, 40),
+      type: (b as HTMLButtonElement).type,
+      id: b.id,
+    }))
+  );
+  console.log("Buttons on page:", JSON.stringify(buttons));
 
   // Fill username
   await page
@@ -142,10 +168,21 @@ async function login(page: Page) {
   // Submit
   await page.locator('button[type="submit"]').first().click();
 
+  // Wait a moment and log what happened
+  await page.waitForTimeout(3000);
+  console.log(`URL after submit: ${page.url()}`);
+  console.log(`Title after submit: ${await page.title()}`);
+  // Log any visible error messages
+  const errorText = await page.evaluate(() => {
+    const el = document.querySelector('[class*="error"], [class*="alert"], [role="alert"]');
+    return el?.textContent?.trim().slice(0, 200) ?? null;
+  });
+  if (errorText) console.log(`Login error message: ${errorText}`);
+
   // Wait until we've left the sign-in page
   await page.waitForFunction(
     () => !window.location.href.includes("/signin"),
-    { timeout: 15_000 }
+    { timeout: 30_000 }
   );
 
   console.log("Logged in successfully");
