@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, internalQuery } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 // Available avatar emojis for children
 export const AVATAR_EMOJIS = [
@@ -227,5 +227,16 @@ export const remove = mutation({
     }
 
     await ctx.db.delete(args.id);
+  },
+});
+
+// Used by the plan generator
+export const getByFamily = internalQuery({
+  args: { familyId: v.id("families") },
+  handler: async (ctx, { familyId }) => {
+    return ctx.db
+      .query("childProfiles")
+      .withIndex("by_family", (q) => q.eq("familyId", familyId))
+      .collect();
   },
 });

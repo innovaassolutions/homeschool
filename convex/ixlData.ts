@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 // Save IXL diagnostic data (called by Claude Code after extracting from IXL)
@@ -560,6 +560,108 @@ function parseTime(timeStr: string): number {
   if (period === "am" && hours === 12) hours = 0;
   return hours * 60 + minutes;
 }
+
+// Called by the Railway Playwright scraper via the /ixl-sync HTTP action.
+// No familyCode needed — this is a single-family personal app.
+export const syncFromScraper = internalMutation({
+  args: {
+    children: v.array(v.object({
+      name: v.string(),
+      math: v.optional(v.object({
+        overallLevel: v.optional(v.number()),
+        strands: v.array(v.object({ name: v.string(), level: v.number() })),
+        recommendations: v.array(v.object({
+          skillId: v.string(),
+          skillName: v.string(),
+          strand: v.string(),
+          priority: v.number(),
+          url: v.optional(v.string()),
+        })),
+      })),
+      ela: v.optional(v.object({
+        overallLevel: v.optional(v.number()),
+        strands: v.array(v.object({ name: v.string(), level: v.number() })),
+        recommendations: v.array(v.object({
+          skillId: v.string(),
+          skillName: v.string(),
+          strand: v.string(),
+          priority: v.number(),
+          url: v.optional(v.string()),
+        })),
+      })),
+    })),
+  },
+  handler: async (ctx, args) => {
+    // Single-family app — just grab the first (only) family
+    const family = await ctx.db.query("families").first();
+
+    if (!family) throw new Error("No family found in database");
+
+    const allChildren = await ctx.db
+      .query("childProfiles")
+      .withIndex("by_family", (q) => q.eq("familyId", family._id))
+      .collect();
+
+    const results: Array<{ name: string; status: string }> = [];
+
+    for (const childData of args.children) {
+      const child = allChildren.find(
+        (c) => c.name.toLowerCase() === childData.name.toLowerCase()
+      );
+
+      if (!child) {
+        results.push({ name: childData.name, status: "not_found" });
+        continue;
+      }
+
+      const now = Date.now();
+
+      for (const subject of ["math", "ela"] as const) {
+        const data = childData[subject];
+        if (!data) continue;
+
+        // Save diagnostic snapshot
+        await ctx.db.insert("ixlDiagnostics", {
+          childId: child._id,
+          subject,
+          extractedAt: now,
+          overallLevel: data.overallLevel,
+          strands: data.strands,
+        });
+
+        // Upsert recommendations
+        if (data.recommendations.length > 0) {
+          const existing = await ctx.db
+            .query("ixlRecommendations")
+            .withIndex("by_child_subject", (q) =>
+              q.eq("childId", child._id).eq("subject", subject)
+            )
+            .first();
+
+          if (existing) {
+            await ctx.db.patch(existing._id, {
+              recommendations: data.recommendations,
+              extractedAt: now,
+              syncedToSchedule: false,
+            });
+          } else {
+            await ctx.db.insert("ixlRecommendations", {
+              childId: child._id,
+              subject,
+              extractedAt: now,
+              recommendations: data.recommendations,
+              syncedToSchedule: false,
+            });
+          }
+        }
+      }
+
+      results.push({ name: childData.name, status: "synced" });
+    }
+
+    return results;
+  },
+});
 
 // Helper function to determine subject from text
 function determineSubject(text: string): string | undefined {

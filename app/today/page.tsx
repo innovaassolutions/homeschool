@@ -62,10 +62,12 @@ async function playTimerCompleteSound() {
   }
 }
 
-// IXL subject URLs
+// IXL subject URLs (fallback when no specific skill URL is set)
 const IXL_URLS: Record<string, string> = {
-  math: "https://www.ixl.com/diagnostic/arena?subject=math",
-  ela: "https://www.ixl.com/diagnostic/arena?subject=ela",
+  math: "https://ca.ixl.com/diagnostic/arena?subject=math",
+  ela: "https://ca.ixl.com/diagnostic/arena?subject=ela",
+  science: "https://ca.ixl.com/science",
+  social_studies: "https://ca.ixl.com/social-studies",
 };
 
 // Subject display info
@@ -463,6 +465,26 @@ export default function TodayPage() {
               <p className="text-gray-600">
                 {currentBlock?.instructions || `Work on your IXL ${subjectInfo.name} recommendations`}
               </p>
+
+              {/* Direct IXL skill link */}
+              {currentBlock?.resource?.url && (
+                <a
+                  href={currentBlock.resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full p-4 bg-teal-50 border-2 border-teal-300 rounded-xl
+                             hover:bg-teal-100 active:bg-teal-200 transition-colors text-left">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">🔗</span>
+                    <div>
+                      <p className="font-semibold text-teal-800 text-sm leading-tight">
+                        {currentBlock.resource.name}
+                      </p>
+                      <p className="text-teal-600 text-xs mt-0.5">Tap to open in IXL →</p>
+                    </div>
+                  </div>
+                </a>
+              )}
 
               {/* Timer */}
               {timeRemaining !== null && (

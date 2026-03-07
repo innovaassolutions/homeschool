@@ -1,0 +1,19 @@
+{
+  "name": "ixl-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node --loader ts-node/esm src/ixl-sync.ts",
+    "dev": "node --loader ts-node/esm src/ixl-sync.ts",
+    "install-browsers": "playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

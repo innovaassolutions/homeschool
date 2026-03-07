@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 
 // Generate a unique family code (e.g., "SMITH-7823")
 function generateFamilyCode(familyName: string): string {
@@ -140,5 +140,12 @@ export const update = mutation({
 
     await ctx.db.patch(family._id, updates);
     return family._id;
+  },
+});
+
+// Used by the plan generator — single-family personal app
+export const getFirst = internalQuery({
+  handler: async (ctx) => {
+    return ctx.db.query("families").first();
   },
 });
