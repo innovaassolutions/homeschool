@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node --loader ts-node/esm src/ixl-sync.ts",
-    "dev": "node --loader ts-node/esm src/ixl-sync.ts",
+    "start": "tsx src/ixl-sync.ts",
+    "dev": "tsx src/ixl-sync.ts",
     "install-browsers": "playwright install chromium"
   },
   "dependencies": {
@@ -13,7 +13,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
