@@ -14,8 +14,8 @@ import { config } from "dotenv";
 import { resolve } from "path";
 
 // Load .env from the scraper dir, then fall back to ../.env.local (local dev)
-config({ path: resolve(import.meta.dirname, "../.env") });
-config({ path: resolve(import.meta.dirname, "../../.env.local") });
+config({ path: resolve(__dirname, "../.env") });
+config({ path: resolve(__dirname, "../../.env.local") });
 
 // ---------------------------------------------------------------------------
 // Config
