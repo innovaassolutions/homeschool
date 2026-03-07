@@ -155,20 +155,35 @@ async function login(page: Page) {
 
   console.log(`Filling username (starts with: ${USERNAME.slice(0, 3)}...)`);
 
-  // Click then type to trigger JS events properly (fill() bypasses some React handlers)
-  const usernameInput = page.locator('#siusername');
-  await usernameInput.click();
-  await usernameInput.pressSequentially(USERNAME, { delay: 50 });
+  // IXL uses React controlled inputs. We must use the native value setter
+  // to trigger React's synthetic event system and enable the submit button.
+  await page.evaluate(([u, p]: [string, string]) => {
+    function setReactValue(id: string, value: string) {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (!el) throw new Error(`Input #${id} not found`);
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype, "value"
+      )?.set;
+      nativeSetter?.call(el, value);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    setReactValue("siusername", u);
+    setReactValue("sipassword", p);
+  }, [USERNAME, PASSWORD] as [string, string]);
 
-  const passwordInput = page.locator('#sipassword');
-  await passwordInput.click();
-  await passwordInput.pressSequentially(PASSWORD, { delay: 50 });
+  // Wait for React to process the events and enable the submit button
+  await page.waitForTimeout(1000);
 
-  // Short pause before submit (more human-like)
-  await page.waitForTimeout(500);
+  // Log button state before clicking
+  const btnDisabled = await page.evaluate(() => {
+    const btn = document.getElementById("signin-button") as HTMLButtonElement | null;
+    return { disabled: btn?.disabled, text: btn?.textContent?.trim() };
+  });
+  console.log("Submit button state:", JSON.stringify(btnDisabled));
 
-  // Submit via the specific button id
-  await page.locator('#signin-button').click();
+  // Submit — use force:true as fallback if button is still disabled
+  await page.locator('#signin-button').click({ force: btnDisabled.disabled });
 
   // Wait a moment and log what happened
   await page.waitForTimeout(3000);
