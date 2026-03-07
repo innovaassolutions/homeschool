@@ -103,6 +103,21 @@ async function run() {
     // Suppress noisy console output from IXL's own JS
     page.on("console", () => {});
 
+    // Intercept network responses during login to see what IXL's server returns
+    page.on("response", async (response) => {
+      const url = response.url();
+      if (url.includes("signin") || url.includes("login") || url.includes("auth") || url.includes("session")) {
+        try {
+          const status = response.status();
+          const body = await response.text().catch(() => "(body unreadable)");
+          console.log(`[NET] ${response.request().method()} ${url} → ${status}`);
+          if (status !== 200 || body.includes("error") || body.includes("captcha")) {
+            console.log(`[NET body] ${body.slice(0, 300)}`);
+          }
+        } catch {}
+      }
+    });
+
     await login(page);
 
     const students = STUDENT_NAMES.length > 0
