@@ -11,10 +11,13 @@
 import type * as ai from "../ai.js";
 import type * as childProfiles from "../childProfiles.js";
 import type * as conversations from "../conversations.js";
+import type * as crons from "../crons.js";
 import type * as dailyProgress from "../dailyProgress.js";
 import type * as families from "../families.js";
+import type * as http from "../http.js";
 import type * as ixlData from "../ixlData.js";
 import type * as notifications from "../notifications.js";
+import type * as planGenerator from "../planGenerator.js";
 import type * as sessions from "../sessions.js";
 import type * as weeklyPlans from "../weeklyPlans.js";
 
@@ -28,10 +31,13 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   childProfiles: typeof childProfiles;
   conversations: typeof conversations;
+  crons: typeof crons;
   dailyProgress: typeof dailyProgress;
   families: typeof families;
+  http: typeof http;
   ixlData: typeof ixlData;
   notifications: typeof notifications;
+  planGenerator: typeof planGenerator;
   sessions: typeof sessions;
   weeklyPlans: typeof weeklyPlans;
 }>;
