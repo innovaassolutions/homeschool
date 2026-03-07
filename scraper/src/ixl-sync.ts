@@ -110,8 +110,9 @@ async function run() {
           const status = response.status();
           const body = await response.text().catch(() => "(body unreadable)");
           console.log(`[NET] ${response.request().method()} ${url} → ${status}`);
-          if (status !== 200 || body.includes("error") || body.includes("captcha")) {
-            console.log(`[NET body] ${body.slice(0, 300)}`);
+          // Always log the body for the AJAX login endpoint
+          if (url.includes("ajax") || status !== 200 || body.includes("error") || body.includes("captcha")) {
+            console.log(`[NET body] ${body.slice(0, 600)}`);
           }
         } catch {}
       }
