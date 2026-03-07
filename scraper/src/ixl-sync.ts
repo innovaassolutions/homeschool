@@ -153,31 +153,38 @@ async function login(page: Page) {
   );
   console.log("Buttons on page:", JSON.stringify(buttons));
 
-  // Fill username
-  await page
-    .locator('input[name="username"], input[type="email"], #username')
-    .first()
-    .fill(USERNAME);
+  console.log(`Filling username (starts with: ${USERNAME.slice(0, 3)}...)`);
 
-  // Fill password
-  await page
-    .locator('input[name="password"], input[type="password"]')
-    .first()
-    .fill(PASSWORD);
+  // Click then type to trigger JS events properly (fill() bypasses some React handlers)
+  const usernameInput = page.locator('#siusername');
+  await usernameInput.click();
+  await usernameInput.pressSequentially(USERNAME, { delay: 50 });
 
-  // Submit
-  await page.locator('button[type="submit"]').first().click();
+  const passwordInput = page.locator('#sipassword');
+  await passwordInput.click();
+  await passwordInput.pressSequentially(PASSWORD, { delay: 50 });
+
+  // Short pause before submit (more human-like)
+  await page.waitForTimeout(500);
+
+  // Submit via the specific button id
+  await page.locator('#signin-button').click();
 
   // Wait a moment and log what happened
   await page.waitForTimeout(3000);
   console.log(`URL after submit: ${page.url()}`);
   console.log(`Title after submit: ${await page.title()}`);
-  // Log any visible error messages
+  // Log any visible error messages (IXL shows errors in various ways)
   const errorText = await page.evaluate(() => {
-    const el = document.querySelector('[class*="error"], [class*="alert"], [role="alert"]');
-    return el?.textContent?.trim().slice(0, 200) ?? null;
+    const selectors = ['[class*="error"]', '[class*="alert"]', '[role="alert"]', '#signin-error', '.login-error'];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el?.textContent?.trim()) return el.textContent.trim().slice(0, 200);
+    }
+    // Also check for any red/warning text
+    return document.body.innerText.slice(0, 500);
   });
-  if (errorText) console.log(`Login error message: ${errorText}`);
+  console.log(`Page content after submit: ${errorText}`);
 
   // Wait until we've left the sign-in page
   await page.waitForFunction(
