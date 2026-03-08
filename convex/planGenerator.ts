@@ -169,7 +169,8 @@ export const savePlanForChild = internalMutation({
 // Prompt builder
 // ---------------------------------------------------------------------------
 
-function buildPrompt(data: NonNullable<Awaited<ReturnType<typeof getChildPlanningData["handler"]>>>): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildPrompt(data: NonNullable<any>): string {
   const { child, weeklyPlan, mathDiag, elaDiag, mathRec, elaRec, dayOfWeek } = data;
   const dayName = DAY_NAMES[dayOfWeek];
   const grade = GRADE_BY_AGE_GROUP[child.ageGroup] ?? "Unknown grade";
