@@ -25,7 +25,7 @@ config({ path: resolve(__dirname, "../../.env.local") });
 // Config
 // ---------------------------------------------------------------------------
 
-const BASE_URL = process.env.IXL_BASE_URL ?? "https://www.ixl.com";
+const BASE_URL = (process.env.IXL_BASE_URL ?? "https://www.ixl.com").replace(/\/$/, "");
 const USERNAME = process.env.IXL_USERNAME ?? "";
 const PASSWORD = process.env.IXL_PASSWORD ?? "";
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
@@ -176,13 +176,15 @@ async function login(page: Page) {
 
   // Session cookie is now set. Navigate to parent analytics,
   // bypassing the sub-account picker that renders on /signin.
-  await page.goto(`${BASE_URL}/analytics`, { waitUntil: "networkidle", timeout: 30_000 });
+  await page.goto(`${BASE_URL}/analytics`, { waitUntil: "load", timeout: 30_000 });
 
   if (page.url().includes("/signin")) {
     throw new Error(`Redirected back to signin after login. URL: ${page.url()}`);
   }
 
   console.log(`Logged in. URL: ${page.url()}`);
+  await page.screenshot({ path: "debug-analytics.png", fullPage: true });
+  console.log("Analytics page title:", await page.title());
 }
 
 // ---------------------------------------------------------------------------
@@ -191,7 +193,7 @@ async function login(page: Page) {
 
 async function discoverStudentNames(page: Page): Promise<string[]> {
   await page.goto(`${BASE_URL}/membership/parent/`, {
-    waitUntil: "networkidle",
+    waitUntil: "load",
   });
 
   const names = await page.evaluate(() => {
@@ -221,7 +223,7 @@ async function scrapeChild(page: Page, name: string): Promise<ChildData> {
 
   // Navigate to the diagnostic results page
   const diagnosticUrl = `${BASE_URL}/reports/diagnostic-results`;
-  await page.goto(diagnosticUrl, { waitUntil: "networkidle", timeout: 20_000 });
+  await page.goto(diagnosticUrl, { waitUntil: "load", timeout: 20_000 });
 
   // Save a debug screenshot (useful when calibrating selectors)
   await page.screenshot({
@@ -264,7 +266,7 @@ async function switchToStudent(page: Page, studentName: string) {
       await el.click();
       // Try to click the student name in the dropdown
       await page.getByText(studentName, { exact: false }).first().click();
-      await page.waitForLoadState("networkidle");
+      await page.waitForLoadState("load");
       console.log(`  Switched to ${studentName}`);
       return;
     }
@@ -272,7 +274,7 @@ async function switchToStudent(page: Page, studentName: string) {
 
   // Fallback: navigate directly via a URL pattern some IXL setups use
   await page.goto(`${BASE_URL}/reports/diagnostic-results`, {
-    waitUntil: "networkidle",
+    waitUntil: "load",
   });
   console.log(`  (Student switcher not found — using current active student)`);
 }
