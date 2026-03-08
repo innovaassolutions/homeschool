@@ -28,7 +28,11 @@ config({ path: resolve(__dirname, "../../.env.local") });
 const BASE_URL = (process.env.IXL_BASE_URL ?? "https://www.ixl.com").replace(/\/$/, "");
 const USERNAME = process.env.IXL_USERNAME ?? "";
 const PASSWORD = process.env.IXL_PASSWORD ?? "";
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
+// Convex HTTP actions are served at *.convex.site, not *.convex.cloud
+const CONVEX_URL = (process.env.NEXT_PUBLIC_CONVEX_URL ?? "").replace(
+  "convex.cloud",
+  "convex.site"
+);
 const SYNC_SECRET = process.env.IXL_SYNC_SECRET ?? "";
 const STUDENT_NAMES = (process.env.IXL_STUDENT_NAMES ?? "")
   .split(",")
