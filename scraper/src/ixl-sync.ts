@@ -82,33 +82,30 @@ async function run() {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      // Stealth: hide automation signals
       "--disable-blink-features=AutomationControlled",
     ],
   });
 
+  const contextOptions = {
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    viewport: { width: 1280, height: 900 } as const,
+    locale: "en-CA",
+    timezoneId: "America/Toronto",
+  };
+
   try {
-    const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      viewport: { width: 1280, height: 900 },
-      // Stealth: set realistic locale/timezone
-      locale: "en-CA",
-      timezoneId: "America/Toronto",
-    });
-
-    const page = await context.newPage();
-
-    await login(page);
-
-    const students = STUDENT_NAMES.length > 0
-      ? STUDENT_NAMES
-      : await discoverStudentNames(page);
+    // If student names aren't configured, discover them via a parent login
+    let students = STUDENT_NAMES;
+    if (students.length === 0) {
+      const discoverCtx = await browser.newContext(contextOptions);
+      const discoverPage = await discoverCtx.newPage();
+      students = await discoverStudentNames(discoverPage);
+      await discoverCtx.close();
+    }
 
     if (students.length === 0) {
-      console.error(
-        "No students found. Set IXL_STUDENT_NAMES in your .env file."
-      );
+      console.error("No students found. Set IXL_STUDENT_NAMES in your .env file.");
       process.exit(1);
     }
 
@@ -116,10 +113,21 @@ async function run() {
 
     const childrenData: ChildData[] = [];
 
+    // Log in separately for each student to avoid having to use the
+    // parent-portal student-switcher UI (which we don't have selectors for).
+    // After AJAX login, the sub-account picker renders on /signin with each
+    // student's name — we just click the name to enter that student's session.
     for (const name of students) {
       console.log(`\n--- Syncing: ${name} ---`);
-      const data = await scrapeChild(page, name);
-      childrenData.push(data);
+      const ctx = await browser.newContext(contextOptions);
+      const page = await ctx.newPage();
+      try {
+        await loginAsStudent(page, name);
+        const data = await scrapeChild(page, name);
+        childrenData.push(data);
+      } finally {
+        await ctx.close();
+      }
     }
 
     await sendToConvex(childrenData);
@@ -130,15 +138,10 @@ async function run() {
 }
 
 // ---------------------------------------------------------------------------
-// Login
+// Fill credentials helper (React controlled inputs need native setter)
 // ---------------------------------------------------------------------------
 
-async function login(page: Page) {
-  const signinUrl = BASE_URL.replace(/\/$/, "") + "/signin";
-  console.log(`Navigating to ${signinUrl}`);
-  await page.goto(signinUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
-
-  // Fill credentials using native value setter (required for React controlled inputs)
+async function fillCredentials(page: Page) {
   await page.evaluate(([u, p]: [string, string]) => {
     const nativeSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value"
@@ -152,65 +155,60 @@ async function login(page: Page) {
     pEl.dispatchEvent(new Event("input", { bubbles: true }));
     pEl.dispatchEvent(new Event("change", { bubbles: true }));
   }, [USERNAME, PASSWORD] as [string, string]);
+}
 
+// ---------------------------------------------------------------------------
+// Log in as a specific student via the sub-account picker
+// ---------------------------------------------------------------------------
+
+async function loginAsStudent(page: Page, studentName: string) {
+  await page.goto(`${BASE_URL}/signin`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await fillCredentials(page);
   await page.waitForTimeout(1000);
 
-  // Capture the AJAX login response before pressing Enter
+  // Capture AJAX response before submitting
   const ajaxPromise = page.waitForResponse(
     (r) => r.url().includes("/signin/ajax") && r.request().method() === "POST",
     { timeout: 15_000 }
   );
-
   await page.locator("#sipassword").press("Enter");
+  await ajaxPromise;
 
-  const ajaxResp = await ajaxPromise;
-  const loginResult = await ajaxResp.json().catch(() => null) as {
-    subaccounts?: Array<{ username: string; subAccountEncryptedLogin: string }>;
-  } | null;
+  // Sub-account picker renders on /signin after AJAX success.
+  // Wait for it, then click the student's name.
+  await page.waitForTimeout(2000);
+  await page.getByText(studentName, { exact: true }).first().click({ timeout: 8_000 });
 
-  if (!loginResult?.subaccounts?.length) {
-    throw new Error(`Login failed: ${JSON.stringify(loginResult).slice(0, 300)}`);
-  }
-
-  console.log(`Authenticated. Students: ${loginResult.subaccounts.map((s) => s.username).join(", ")}`);
-
-  // Session cookie is now set. Navigate to parent analytics,
-  // bypassing the sub-account picker that renders on /signin.
-  await page.goto(`${BASE_URL}/analytics`, { waitUntil: "load", timeout: 30_000 });
-
-  if (page.url().includes("/signin")) {
-    throw new Error(`Redirected back to signin after login. URL: ${page.url()}`);
-  }
-
-  console.log(`Logged in. URL: ${page.url()}`);
-  await page.screenshot({ path: "debug-analytics.png", fullPage: true });
-  console.log("Analytics page title:", await page.title());
+  // Wait for navigation away from /signin into the student's session
+  await page.waitForFunction(
+    () => !window.location.href.includes("/signin"),
+    { timeout: 20_000 }
+  );
+  console.log(`Logged in as ${studentName}. URL: ${page.url()}`);
 }
 
 // ---------------------------------------------------------------------------
-// Discover student names (fallback when IXL_STUDENT_NAMES is not set)
+// Discover student names via parent AJAX login (fallback)
 // ---------------------------------------------------------------------------
 
 async function discoverStudentNames(page: Page): Promise<string[]> {
-  await page.goto(`${BASE_URL}/membership/parent/`, {
-    waitUntil: "load",
-  });
+  await page.goto(`${BASE_URL}/signin`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+  await fillCredentials(page);
+  await page.waitForTimeout(1000);
 
-  const names = await page.evaluate(() => {
-    const selectors = [
-      '[data-student-name]',
-      '[class*="student"][class*="name"]',
-      '.student-name',
-      '.student-card .name',
-    ];
-    for (const sel of selectors) {
-      const els = Array.from(document.querySelectorAll(sel));
-      if (els.length) return els.map((el) => el.textContent?.trim() ?? "").filter(Boolean);
-    }
-    return [];
-  });
+  const ajaxPromise = page.waitForResponse(
+    (r) => r.url().includes("/signin/ajax") && r.request().method() === "POST",
+    { timeout: 15_000 }
+  );
+  await page.locator("#sipassword").press("Enter");
+  const ajaxResp = await ajaxPromise;
+  const result = await ajaxResp.json().catch(() => null) as {
+    subaccounts?: Array<{ username: string; isParent?: boolean }>;
+  } | null;
 
-  return names;
+  return (result?.subaccounts ?? [])
+    .filter((s) => !s.isParent)
+    .map((s) => s.username);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,65 +216,19 @@ async function discoverStudentNames(page: Page): Promise<string[]> {
 // ---------------------------------------------------------------------------
 
 async function scrapeChild(page: Page, name: string): Promise<ChildData> {
-  // Switch the parent account to this student
-  await switchToStudent(page, name);
+  // We're already logged in as this student — navigate to their diagnostic page
+  await page.goto(`${BASE_URL}/reports/diagnostic-results`, { waitUntil: "load", timeout: 20_000 });
 
-  // Navigate to the diagnostic results page
-  const diagnosticUrl = `${BASE_URL}/reports/diagnostic-results`;
-  await page.goto(diagnosticUrl, { waitUntil: "load", timeout: 20_000 });
-
-  // Save a debug screenshot (useful when calibrating selectors)
-  await page.screenshot({
-    path: `debug-${name.toLowerCase()}-diagnostic.png`,
-    fullPage: true,
-  });
+  console.log(`  Diagnostic URL: ${page.url()}`);
+  await page.screenshot({ path: `debug-${name.toLowerCase()}-diagnostic.png`, fullPage: true });
 
   const math = await scrapeSubject(page, "math");
   const ela = await scrapeSubject(page, "ela");
 
-  console.log(
-    `  Math: overall=${math.overallLevel ?? "?"}, strands=${math.strands.length}, recs=${math.recommendations.length}`
-  );
-  console.log(
-    `  ELA:  overall=${ela.overallLevel ?? "?"}, strands=${ela.strands.length}, recs=${ela.recommendations.length}`
-  );
+  console.log(`  Math: overall=${math.overallLevel ?? "?"}, strands=${math.strands.length}, recs=${math.recommendations.length}`);
+  console.log(`  ELA:  overall=${ela.overallLevel ?? "?"}, strands=${ela.strands.length}, recs=${ela.recommendations.length}`);
 
   return { name, math, ela };
-}
-
-// ---------------------------------------------------------------------------
-// Switch parent account to a specific student
-// ---------------------------------------------------------------------------
-
-async function switchToStudent(page: Page, studentName: string) {
-  // IXL shows a student-switcher dropdown in the parent header.
-  // We try several possible selectors — adjust if IXL changes their markup.
-  const switcherSelectors = [
-    '[data-testid="student-switcher"]',
-    '[aria-label*="student" i]',
-    '.student-switcher',
-    '[class*="studentSwitcher"]',
-    '[class*="student-switcher"]',
-  ];
-
-  for (const sel of switcherSelectors) {
-    const el = page.locator(sel).first();
-    const visible = await el.isVisible({ timeout: 2_000 }).catch(() => false);
-    if (visible) {
-      await el.click();
-      // Try to click the student name in the dropdown
-      await page.getByText(studentName, { exact: false }).first().click();
-      await page.waitForLoadState("load");
-      console.log(`  Switched to ${studentName}`);
-      return;
-    }
-  }
-
-  // Fallback: navigate directly via a URL pattern some IXL setups use
-  await page.goto(`${BASE_URL}/reports/diagnostic-results`, {
-    waitUntil: "load",
-  });
-  console.log(`  (Student switcher not found — using current active student)`);
 }
 
 // ---------------------------------------------------------------------------
