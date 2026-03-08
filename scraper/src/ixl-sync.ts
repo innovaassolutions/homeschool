@@ -99,25 +99,6 @@ async function run() {
 
     const page = await context.newPage();
 
-    // Suppress noisy console output from IXL's own JS
-    page.on("console", () => {});
-
-    // Intercept network responses during login to see what IXL's server returns
-    page.on("response", async (response) => {
-      const url = response.url();
-      if (url.includes("signin") || url.includes("login") || url.includes("auth") || url.includes("session")) {
-        try {
-          const status = response.status();
-          const body = await response.text().catch(() => "(body unreadable)");
-          console.log(`[NET] ${response.request().method()} ${url} → ${status}`);
-          // Always log the body for the AJAX login endpoint
-          if (url.includes("ajax") || status !== 200 || body.includes("error") || body.includes("captcha")) {
-            console.log(`[NET body] ${body.slice(0, 600)}`);
-          }
-        } catch {}
-      }
-    });
-
     await login(page);
 
     const students = STUDENT_NAMES.length > 0
@@ -153,41 +134,11 @@ async function run() {
 // ---------------------------------------------------------------------------
 
 async function login(page: Page) {
-  // Ensure no double-slash in URL
   const signinUrl = BASE_URL.replace(/\/$/, "") + "/signin";
   console.log(`Navigating to ${signinUrl}`);
   await page.goto(signinUrl, { waitUntil: "domcontentloaded", timeout: 30_000 });
 
-  console.log(`Page URL after load: ${page.url()}`);
-  console.log(`Page title: ${await page.title()}`);
-
-  // Log all input fields found so we can verify selectors
-  const inputs = await page.evaluate(() =>
-    Array.from(document.querySelectorAll("input")).map((i) => ({
-      name: i.name,
-      id: i.id,
-      type: i.type,
-      placeholder: i.placeholder,
-    }))
-  );
-  console.log("Inputs on page:", JSON.stringify(inputs));
-
-  // Log all buttons
-  const buttons = await page.evaluate(() =>
-    Array.from(document.querySelectorAll("button, input[type=submit]")).map((b) => ({
-      text: b.textContent?.trim().slice(0, 40),
-      type: (b as HTMLButtonElement).type,
-      id: b.id,
-    }))
-  );
-  console.log("Buttons on page:", JSON.stringify(buttons));
-
-  console.log(`Filling username (starts with: ${USERNAME.slice(0, 3)}...)`);
-
-  // IXL uses React controlled inputs. We must use the native value setter
-  // to trigger React's synthetic event system and enable the submit button.
-  // Avoid inner `function` declarations — tsx compiles them with __name()
-  // which doesn't exist in the browser context.
+  // Fill credentials using native value setter (required for React controlled inputs)
   await page.evaluate(([u, p]: [string, string]) => {
     const nativeSetter = Object.getOwnPropertyDescriptor(
       window.HTMLInputElement.prototype, "value"
@@ -202,42 +153,36 @@ async function login(page: Page) {
     pEl.dispatchEvent(new Event("change", { bubbles: true }));
   }, [USERNAME, PASSWORD] as [string, string]);
 
-  // Wait for React to process the events and enable the submit button
   await page.waitForTimeout(1000);
 
-  // Log button state
-  const btnDisabled = await page.evaluate(() => {
-    const btn = document.getElementById("signin-button") as HTMLButtonElement | null;
-    return { disabled: btn?.disabled, text: btn?.textContent?.trim() };
-  });
-  console.log("Submit button state:", JSON.stringify(btnDisabled));
-
-  // Submit via keyboard Enter on the password field — more natural than button click
-  await page.locator('#sipassword').press('Enter');
-
-  // Wait a moment and log what happened
-  await page.waitForTimeout(3000);
-  console.log(`URL after submit: ${page.url()}`);
-  console.log(`Title after submit: ${await page.title()}`);
-  // Log any visible error messages (IXL shows errors in various ways)
-  const errorText = await page.evaluate(() => {
-    const selectors = ['[class*="error"]', '[class*="alert"]', '[role="alert"]', '#signin-error', '.login-error'];
-    for (const sel of selectors) {
-      const el = document.querySelector(sel);
-      if (el?.textContent?.trim()) return el.textContent.trim().slice(0, 200);
-    }
-    // Also check for any red/warning text
-    return document.body.innerText.slice(0, 500);
-  });
-  console.log(`Page content after submit: ${errorText}`);
-
-  // Wait until we've left the sign-in page
-  await page.waitForFunction(
-    () => !window.location.href.includes("/signin"),
-    { timeout: 30_000 }
+  // Capture the AJAX login response before pressing Enter
+  const ajaxPromise = page.waitForResponse(
+    (r) => r.url().includes("/signin/ajax") && r.request().method() === "POST",
+    { timeout: 15_000 }
   );
 
-  console.log("Logged in successfully");
+  await page.locator("#sipassword").press("Enter");
+
+  const ajaxResp = await ajaxPromise;
+  const loginResult = await ajaxResp.json().catch(() => null) as {
+    subaccounts?: Array<{ username: string; subAccountEncryptedLogin: string }>;
+  } | null;
+
+  if (!loginResult?.subaccounts?.length) {
+    throw new Error(`Login failed: ${JSON.stringify(loginResult).slice(0, 300)}`);
+  }
+
+  console.log(`Authenticated. Students: ${loginResult.subaccounts.map((s) => s.username).join(", ")}`);
+
+  // Session cookie is now set. Navigate to parent analytics,
+  // bypassing the sub-account picker that renders on /signin.
+  await page.goto(`${BASE_URL}/analytics`, { waitUntil: "networkidle", timeout: 30_000 });
+
+  if (page.url().includes("/signin")) {
+    throw new Error(`Redirected back to signin after login. URL: ${page.url()}`);
+  }
+
+  console.log(`Logged in. URL: ${page.url()}`);
 }
 
 // ---------------------------------------------------------------------------
